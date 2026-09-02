@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quantum Digital Signature Security Analyzer</title>
+    <meta name="description" content="Quantum-Inspired Cyber Threat Detection for Digital Signature Security">
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <!-- App Container -->
+    <div class="app-container">
+        <!-- Top Navigation / Header -->
+        <header class="app-header" id="app-header">
+            <div class="header-content">
+                <div class="header-brand">
+                    <div class="brand-icon">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <polygon points="12 2 19 8.5 12 15 5 8.5 12 2"></polygon>
+                            <polyline points="5 15.5 12 22 19 15.5"></polyline>
+                            <polyline points="12 15 12 22"></polyline>
+                        </svg>
+                    </div>
+                    <div>
+                        <h1 class="brand-title">Quantum Digital Signature Security Analyzer</h1>
+                        <p class="brand-subtitle">Quantum-Inspired Cyber Threat Detection for Digital Signature Security</p>
+                    </div>
+                </div>
+                <div class="header-badges">
+                    <button type="button" class="btn btn-sm btn-danger btn-top-alert" id="btn-top-email-alert" title="Open Forensic Email Alert Center (Recipient: deepakmurugaiyan@gmail.com)">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+                            <polyline points="22,6 12,13 2,6"></polyline>
+                        </svg>
+                        <span>Email Alert</span>
+                        <span class="pulse-dot-red" id="top-email-alert-dot"></span>
+                    </button>
+                    <span class="badge badge-quantum">
+                        <span class="pulse-dot"></span> QDS Protocol Monitored
+                    </span>
+                    <span class="badge badge-neutral" id="current-time-badge">UTC LIVE</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Workspace Grid -->
+        <main class="main-layout" id="main-layout">
+            <!-- Left Column: Upload & Quick Test Scenarios -->
+            <section class="left-panel">
+                <!-- Upload Card -->
+                <div class="card upload-card" id="upload-card">
+                    <div class="card-header">
+                        <h2 class="card-title">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                            1. Security File Ingestion
+                        </h2>
+                        <span class="badge badge-outline">.TXT / .JSON / .CSV / .PDF</span>
+                    </div>
+
+                    <form id="upload-form" class="upload-form">
+                        <!-- Drag & Drop Zone -->
+                        <div class="drop-zone" id="drop-zone">
+                            <input type="file" id="file-input" name="file" accept=".txt,.json,.csv,.pdf,.log" class="file-input-hidden">
+                            <div class="drop-zone-content">
+                                <div class="upload-icon-circle">
+                                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                                </div>
+                                <p class="drop-zone-main-text">Drag & drop your security signature file here</p>
+                                <p class="drop-zone-sub-text">or <span class="browse-link">browse from local disk</span></p>
+                                <div class="selected-file-pill" id="selected-file-pill" style="display: none;">
+                                    <span id="selected-filename">No file selected</span>
+                                    <button type="button" class="btn-clear-file" id="btn-clear-file">&times;</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Mode Selection (Default: Automatic Threat Detection) -->
+                        <div class="form-group mode-selector-group">
+                            <label for="attack-mode-select" class="form-label">Analysis Mode:</label>
+                            <select id="attack-mode-select" name="attack_mode" class="form-select">
+                                <option value="Automatic Detection" selected>⚡ Automatic Threat Detection (Default - Recommended)</option>
+                                <option value="Simulate: Replay Attack">Simulate Attack: Replay Attack</option>
+                                <option value="Simulate: Forgery">Simulate Attack: Forgery</option>
+                                <option value="Simulate: Impersonation">Simulate Attack: Impersonation</option>
+                                <option value="Simulate: Classical Channel Tampering">Simulate Attack: Channel Tampering</option>
+                                <option value="Simulate: Intercept-Resend">Simulate Attack: Intercept-Resend</option>
+                                <option value="Simulate: Entangle-and-Measure">Simulate Attack: Quantum Eavesdropping</option>
+                            </select>
+                            <small class="form-hint">Automatic Detection inspects all signature tokens, nonces, timestamps, and quantum state error rates.</small>
+                        </div>
+
+                        <!-- Action Buttons -->
+                        <div class="button-row">
+                            <button type="submit" class="btn btn-primary" id="btn-analyze">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                                Analyze File
+                            </button>
+                            <button type="button" class="btn btn-secondary" id="btn-reset">Reset</button>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- 1-Click Test Scenarios Card -->
+                <div class="card sample-card" id="sample-card">
+                    <div class="card-header">
+                        <h3 class="card-title">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+                            Quick Test Scenarios (1-Click)
+                        </h3>
+                    </div>
+                    <div class="sample-btn-grid" id="sample-btn-grid">
+                        <button class="sample-btn" data-sample="test_1_secure.txt">
+                            <span class="sample-tag tag-secure">TEST 1</span>
+                            <span class="sample-name">Secure File</span>
+                        </button>
+                        <button class="sample-btn" data-sample="test_2_replay_attack.txt">
+                            <span class="sample-tag tag-high">TEST 2</span>
+                            <span class="sample-name">Replay Attack</span>
+                        </button>
+                        <button class="sample-btn" data-sample="test_3_forgery.txt">
+                            <span class="sample-tag tag-high">TEST 3</span>
+                            <span class="sample-name">Signature Forgery</span>
+                        </button>
+                        <button class="sample-btn" data-sample="test_4_impersonation.txt">
+                            <span class="sample-tag tag-high">TEST 4</span>
+                            <span class="sample-name">Impersonation</span>
+                        </button>
+                        <button class="sample-btn" data-sample="test_5_channel_tampering.txt">
+                            <span class="sample-tag tag-high">TEST 5</span>
+                            <span class="sample-name">Channel Tampering</span>
+                        </button>
+                        <button class="sample-btn" data-sample="test_6_quantum_eavesdropping.txt">
+                            <span class="sample-tag tag-critical">TEST 6</span>
+                            <span class="sample-name">Quantum Eavesdropping</span>
+                        </button>
+                        <button class="sample-btn" data-sample="test_7_multiple_threats.txt">
+                            <span class="sample-tag tag-critical">TEST 7</span>
+                            <span class="sample-name">Multi-Threat File</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- File Security Verification Card -->
+                <div class="card verification-card" id="verification-card">
+                    <div class="card-header">
+                        <h3 class="card-title">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                            2. Security Verification & SHA-256
+                        </h3>
+                        <span class="status-indicator" id="verification-badge">AWAITING INPUT</span>
+                    </div>
+                    <div class="verification-grid">
+                        <div class="v-item">
+                            <span class="v-label">File Integrity:</span>
+                            <span class="v-value" id="val-file-integrity">-</span>
+                        </div>
+                        <div class="v-item">
+                            <span class="v-label">Integrity Status:</span>
+                            <span class="v-value font-mono font-bold" id="val-integrity-status">-</span>
+                        </div>
+                        <div class="v-item full-width">
+                            <span class="v-label">SHA-256 Hash Digest:</span>
+                            <div class="hash-box font-mono" id="val-sha256">e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855</div>
+                        </div>
+                        <div class="v-item">
+                            <span class="v-label">Modification Indicators:</span>
+                            <span class="v-value" id="val-mod-indicators">-</span>
+                        </div>
+                        <div class="v-item">
+                            <span class="v-label">Overall Security Status:</span>
+                            <span class="v-value font-bold" id="val-overall-status">-</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Digital Signature Analysis Card -->
+                <div class="card signature-card" id="signature-card">
+                    <div class="card-header">
+                        <h3 class="card-title">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                            3. Digital Signature Analysis
+                        </h3>
+                    </div>
+                    <div class="signature-grid">
+                        <div class="s-item">
+                            <span class="s-label">Signature Present:</span>
+                            <span class="s-value" id="sig-present">-</span>
+                        </div>
+                        <div class="s-item">
+                            <span class="s-label">Signature Status:</span>
+                            <span class="s-value font-bold" id="sig-status">-</span>
+                        </div>
+                        <div class="s-item">
+                            <span class="s-label">Signature Algorithm:</span>
+                            <span class="s-value" id="sig-algo">-</span>
+                        </div>
+                        <div class="s-item">
+                            <span class="s-label">Signer Information:</span>
+                            <span class="s-value" id="sig-signer">-</span>
+                        </div>
+                        <div class="s-item">
+                            <span class="s-label">Verification Result:</span>
+                            <span class="s-value font-mono" id="sig-result">-</span>
+                        </div>
+                        <div class="s-item">
+                            <span class="s-label">Hash Mismatch:</span>
+                            <span class="s-value" id="sig-mismatch">-</span>
+                        </div>
+                    </div>
+                    <div class="crypto-note" id="sig-note">
+                        ℹ️ Prototype heuristic analysis active. Distinguishes signature indicator detection from formal cryptographic verification.
+                    </div>
+                </div>
+            </section>
+
+            <!-- Right Column: Threat Result, First Actions, Quantum Metrics, Graphs, Logs -->
+            <section class="right-panel">
+                <!-- Executive Forensic Alert Card (Appears only on High-Risk Threats) -->
+                <div class="card executive-alert-card" id="executive-forensic-alert-card" style="display: none;">
+                    <div class="efa-header">
+                        <div class="efa-title-group">
+                            <div class="efa-icon-box">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                            </div>
+                            <div>
+                                <div class="efa-badge-row">
+                                    <h3 class="efa-title">Executive Forensic Alert</h3>
+                                    <span class="badge badge-danger badge-pulse" id="efa-status-badge">STATUS: THREAT DETECTED</span>
+                                </div>
+                                <p class="efa-subtitle">Automated high-severity security incident triggered by digital signature & quantum analysis</p>
+                            </div>
+                        </div>
+                        <div class="efa-header-meta">
+                            <span class="badge tag-critical" id="efa-risk-badge">HIGH RISK (78/100)</span>
+                            <div class="efa-case-tag font-mono" id="efa-case-id-display">CASE-00000000</div>
+                        </div>
+                    </div>
+
+                    <div class="efa-body">
+                        <!-- Key Incident Metadata Grid -->
+                        <div class="efa-meta-grid">
+                            <div class="efa-meta-item">
+                                <span class="efa-meta-label">Status:</span>
+                                <span class="efa-meta-value font-bold text-danger" id="efa-status-text">ATTACK DETECTED</span>
+                            </div>
+                            <div class="efa-meta-item">
+                                <span class="efa-meta-label">Risk Level:</span>
+                                <span class="efa-meta-value font-bold text-danger" id="efa-risk-text">HIGH RISK (Score: 78/100)</span>
+                            </div>
+                            <div class="efa-meta-item">
+                                <span class="efa-meta-label">Case ID:</span>
+                                <span class="efa-meta-value font-mono font-bold text-cyan" id="efa-case-id-text">CASE-MTKEFZWF</span>
+                            </div>
+                            <div class="efa-meta-item">
+                                <span class="efa-meta-label">Email Delivery Status:</span>
+                                <div class="efa-email-status-pill" id="efa-email-status-pill">
+                                    <span class="efa-status-dot dot-sent" id="efa-email-status-dot"></span>
+                                    <span class="efa-status-text font-bold" id="efa-email-status-text">Sent</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Triggered Security Rules Section -->
+                        <div class="efa-rules-section">
+                            <div class="efa-section-heading">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                                <span>Triggered Security Rules & Indicators:</span>
+                            </div>
+                            <ul class="efa-rules-list" id="efa-rules-list">
+                                <li><span class="rule-bullet">•</span> Digital signature verification failed (INVALID_HASH_MISMATCH)</li>
+                                <li><span class="rule-bullet">•</span> Timestamp freshness expired (>120s delta)</li>
+                                <li><span class="rule-bullet">•</span> Elevated Quantum Bit Error Rate: QBER=14.20% (Threshold: 5.0%)</li>
+                            </ul>
+                        </div>
+
+                        <!-- Email Transmission Notification Detail -->
+                        <div class="efa-delivery-detail" id="efa-delivery-detail">
+                            <div class="efa-delivery-icon">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+                            </div>
+                            <div class="efa-delivery-info">
+                                <div class="efa-delivery-title">
+                                    <span>Recipient: </span>
+                                    <strong class="text-cyan font-mono" id="efa-recipient-display">deepakmurugaiyan@gmail.com</strong>
+                                    <span class="badge badge-neutral text-xs" id="efa-delivery-badge">Dispatched via TLSv1.3</span>
+                                </div>
+                                <div class="efa-delivery-sub font-mono text-xs" id="efa-delivery-timestamp">
+                                    Incident notification and Executive Forensic Summary PDF dispatched to security administrator.
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Actions Row -->
+                        <div class="efa-actions-row">
+                            <button type="button" class="btn btn-primary btn-glow" id="btn-view-forensic-summary">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                                View Forensic Summary
+                            </button>
+
+                            <button type="button" class="btn btn-danger" id="btn-open-gmail-web">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                                Open in Gmail (Send Alert)
+                            </button>
+
+                            <button type="button" class="btn btn-secondary" id="btn-download-forensic-pdf">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                                Download Report (PDF)
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Main Threat Detection Result Card -->
+                <div class="card threat-card" id="threat-result-card">
+                    <div class="threat-header" id="threat-header-banner">
+                        <div class="threat-headline-group">
+                            <span class="threat-status-tag" id="threat-status-tag">STATUS: SECURE</span>
+                            <h2 class="threat-name-title" id="threat-detected-title">No Malicious Indicators Detected</h2>
+                            <p class="threat-category-sub" id="threat-category-title">Category: Normal / Trusted Operation</p>
+                        </div>
+                        <div class="risk-gauge-box">
+                            <div class="risk-score-circle" id="risk-score-circle">
+                                <span class="score-number" id="risk-score-val">5</span>
+                                <span class="score-max">/100</span>
+                            </div>
+                            <div class="risk-level-badge" id="risk-level-badge">LOW RISK</div>
+                            <div class="confidence-val" id="confidence-val">Confidence: 96%</div>
+                        </div>
+                    </div>
+
+                    <!-- Threat Reason & Evidence -->
+                    <div class="threat-body">
+                        <div class="threat-section">
+                            <h4 class="threat-sec-title">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+                                WHY WAS IT DETECTED?
+                            </h4>
+                            <p class="threat-reason-text" id="threat-reason-text">
+                                No tampering, replay, forgery, or quantum eavesdropping indicators detected.
+                            </p>
+                        </div>
+
+                        <div class="threat-section">
+                            <h4 class="threat-sec-title">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+                                EVIDENCE DETECTED
+                            </h4>
+                            <ul class="evidence-list" id="evidence-list">
+                                <li>✓ All cryptographic and transmission indicators appear clean</li>
+                            </ul>
+                        </div>
+
+                        <!-- FIRST ACTION TO OVERCOME (REQUIRED) -->
+                        <div class="threat-section action-section">
+                            <div class="action-box first-action-box" id="first-action-box">
+                                <div class="action-icon">🛡️</div>
+                                <div>
+                                    <h4 class="action-title">FIRST ACTION TO OVERCOME</h4>
+                                    <p class="action-text font-bold" id="first-action-text">Continue normal security verification.</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- HOW TO PREVENT / OVERCOME -->
+                        <div class="threat-section prevention-section">
+                            <div class="action-box prevention-box" id="prevention-box">
+                                <div class="action-icon">🔐</div>
+                                <div>
+                                    <h4 class="action-title">HOW TO PREVENT / OVERCOME</h4>
+                                    <p class="action-text" id="prevention-text">Continue monitoring and retain the security audit record.</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Additional Threats List (if multi-vector) -->
+                        <div class="multi-threat-box" id="multi-threat-box" style="display: none;">
+                            <span class="multi-tag">Additional Vectors Detected:</span>
+                            <span id="additional-threats-list">-</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Quantum Security Metrics Panel -->
+                <div class="card quantum-card" id="quantum-card">
+                    <div class="card-header">
+                        <h3 class="card-title">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><circle cx="19" cy="5" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="5" cy="5" r="2"/><circle cx="19" cy="19" r="2"/><line x1="12" y1="9" x2="12" y2="3"/><line x1="12" y1="15" x2="12" y2="21"/><line x1="9" y1="12" x2="3" y2="12"/><line x1="15" y1="12" x2="21" y2="12"/></svg>
+                            Quantum Security Metrics (QDS / QKD Telemetry)
+                        </h3>
+                        <span class="badge badge-quantum">SIMULATED QUANTUM STATE</span>
+                    </div>
+
+                    <div class="quantum-metrics-grid">
+                        <div class="q-metric-tile">
+                            <div class="q-label">QBER (Quantum Error Rate)</div>
+                            <div class="q-val font-mono" id="q-val-qber">1.20%</div>
+                            <div class="q-sub">Threshold: &le; 11.00%</div>
+                        </div>
+                        <div class="q-metric-tile">
+                            <div class="q-label">Mismatch Rate</div>
+                            <div class="q-val font-mono" id="q-val-mismatch">1.20%</div>
+                            <div class="q-sub" id="q-sub-mismatch">Mismatches: 2 / 128</div>
+                        </div>
+                        <div class="q-metric-tile">
+                            <div class="q-label">Matching Rate</div>
+                            <div class="q-val font-mono" id="q-val-matching">98.80%</div>
+                            <div class="q-sub" id="q-sub-matches">Matches: 126 / 128</div>
+                        </div>
+                        <div class="q-metric-tile">
+                            <div class="q-label">Quantum Channel Risk</div>
+                            <div class="q-val font-bold" id="q-val-risk">MINIMAL</div>
+                            <div class="q-sub" id="q-sub-status">State Fidelity: 98.80%</div>
+                        </div>
+                        <div class="q-metric-tile">
+                            <div class="q-label">Eavesdropping Probability</div>
+                            <div class="q-val font-mono" id="q-val-eavesdrop">0.48%</div>
+                            <div class="q-sub">Estimated Bell-state interception</div>
+                        </div>
+                        <div class="q-metric-tile">
+                            <div class="q-label">Session Security Level</div>
+                            <div class="q-val font-bold text-success" id="q-val-sec-level">SECURE</div>
+                            <div class="q-sub">Photon basis verification</div>
+                        </div>
+                    </div>
+                    <div class="quantum-disclaimer">
+                        ⚡ Quantum metrics are simulated for prototype demonstration.
+                    </div>
+                </div>
+
+                <!-- Graphs Section -->
+                <div class="card graphs-card" id="graphs-card">
+                    <div class="card-header">
+                        <h3 class="card-title">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+                            Security Telemetry & Threat Intensity Visualizer
+                        </h3>
+                    </div>
+                    <div class="charts-grid">
+                        <div class="chart-wrapper">
+                            <h5 class="chart-title">Threat Metrics (Risk vs Confidence vs Intensity)</h5>
+                            <div class="chart-container" style="position: relative; height: 220px; width: 100%;">
+                                <canvas id="threatMetricsChart"></canvas>
+                            </div>
+                        </div>
+                        <div class="chart-wrapper">
+                            <h5 class="chart-title">Quantum State Distribution (Matching vs Mismatch vs QBER)</h5>
+                            <div class="chart-container" style="position: relative; height: 220px; width: 100%;">
+                                <canvas id="quantumStateChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Attack Scenario Analysis Table -->
+                <div class="card table-card" id="table-card">
+                    <div class="card-header">
+                        <h3 class="card-title">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
+                            Attack Scenario Analysis Matrix
+                        </h3>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="attack-table" id="attack-table">
+                            <thead>
+                                <tr>
+                                    <th>Attack Vector</th>
+                                    <th>Status</th>
+                                    <th>Risk Level</th>
+                                    <th>Risk Score</th>
+                                    <th>Detection Rationale</th>
+                                </tr>
+                            </thead>
+                            <tbody id="attack-table-body">
+                                <!-- Populated dynamically by script.js -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Security Event Logs Card -->
+                <div class="card logs-card" id="logs-card">
+                    <div class="card-header">
+                        <h3 class="card-title">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+                            Audit Trail & Security Logs
+                        </h3>
+                        <button class="btn btn-sm btn-outline" id="btn-export-logs">Export Logs</button>
+                    </div>
+                    <div class="terminal-logs" id="terminal-logs">
+                        <div class="log-entry log-info"><span class="log-time">[INIT]</span> System ready for digital signature ingestion and automatic threat analysis.</div>
+                    </div>
+                </div>
+
+                <!-- Final Security Report Actions -->
+                <div class="card report-card" id="report-card">
+                    <div class="card-header">
+                        <h3 class="card-title">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                            Final Security Audit Report
+                        </h3>
+                        <div class="report-btn-group">
+                            <button class="btn btn-sm btn-primary" id="btn-print-report">🖨️ Print / Save PDF</button>
+                            <button class="btn btn-sm btn-secondary" id="btn-download-json">📥 Export JSON</button>
+                        </div>
+                    </div>
+                    <div class="report-summary-text" id="report-summary-text">
+                        Upload a file or select a 1-click test scenario above to generate your comprehensive audit report.
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- Footer -->
+        <footer class="app-footer">
+            <p>Quantum Digital Signature Security Analyzer &bull; Quantum-Inspired Threat Intelligence &bull; Standard Port 5000 / Local VS Code & Container Environment</p>
+        </footer>
+    </div>
+
+    <!-- Forensic Summary Modal (Triggered by 'View Forensic Summary' button) -->
+    <div class="modal-overlay" id="forensic-summary-modal" style="display: none;">
+        <div class="modal-container">
+            <div class="modal-header">
+                <div class="modal-title-group">
+                    <div class="modal-icon-badge">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                    </div>
+                    <div>
+                        <h3 class="modal-title">Executive Forensic Report Summary</h3>
+                        <p class="modal-subtitle">
+                            Incident Case: <span class="text-cyan font-mono font-bold" id="modal-case-id">CASE-00000000</span> &bull; Status: <span class="text-danger font-bold" id="modal-threat-status">HIGH RISK THREAT</span>
+                        </p>
+                    </div>
+                </div>
+                <button type="button" class="modal-close-btn" id="btn-close-forensic-modal" aria-label="Close modal">&times;</button>
+            </div>
+
+            <div class="modal-body">
+                <!-- Summary Chips Grid -->
+                <div class="modal-chips-grid">
+                    <div class="modal-chip">
+                        <span class="chip-label">Evaluation Target</span>
+                        <span class="chip-value font-mono" id="modal-target-file">file.bin</span>
+                    </div>
+                    <div class="modal-chip">
+                        <span class="chip-label">Risk Level & Score</span>
+                        <span class="chip-value text-danger font-bold" id="modal-risk-score">HIGH (78/100)</span>
+                    </div>
+                    <div class="modal-chip">
+                        <span class="chip-label">Digital Signature</span>
+                        <span class="chip-value font-mono" id="modal-sig-status">INVALID / TAMPERED</span>
+                    </div>
+                    <div class="modal-chip">
+                        <span class="chip-label">Email Notification</span>
+                        <span class="chip-value text-emerald font-bold" id="modal-email-delivery">Dispatched (Sent)</span>
+                    </div>
+                </div>
+
+                <!-- Comprehensive Generated Report Content -->
+                <div class="modal-report-wrapper">
+                    <div class="modal-report-header">
+                        <div class="modal-report-title">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+                            <span>Generated Forensic Investigation Report Text:</span>
+                        </div>
+                        <button type="button" class="btn btn-xs btn-secondary" id="btn-copy-modal-report">📋 Copy Report</button>
+                    </div>
+                    <pre class="modal-report-text font-mono" id="modal-report-content">Generating report...</pre>
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <div class="modal-footer-actions-left">
+                    <button type="button" class="btn btn-danger btn-sm" id="btn-modal-gmail-open">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                        Open in Gmail (Send Alert)
+                    </button>
+                    <button type="button" class="btn btn-secondary btn-sm" id="btn-modal-download-pdf">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                        PDF Summary
+                    </button>
+                    <button type="button" class="btn btn-secondary btn-sm" id="btn-modal-download-txt">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                        TXT Report
+                    </button>
+                </div>
+                <button type="button" class="btn btn-primary btn-sm" id="btn-modal-close-action">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Script Loads After Chart.js -->
+    <script src="/static/script.js"></script>
+</body>
+</html>
