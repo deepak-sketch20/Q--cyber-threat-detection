@@ -6,6 +6,16 @@ import multer from 'multer';
 import { createServer as createViteServer } from 'vite';
 import { analyzeSecurityText, SAMPLE_DATASETS } from './src/analyzerEngine';
 import { executeEmailAlertProcess, getEmailConfig, generateReportFiles } from './src/emailService';
+import {
+  simulateQubit,
+  simulateBellState,
+  simulateEntanglement,
+  simulateTeleportation,
+  applyPauliCorrection,
+  simulateQuantumChannel,
+  simulateCompleteQds,
+  projectiveMeasurement
+} from './src/qdsSimulatorEngine';
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 16 * 1024 * 1024 } });
 
@@ -193,6 +203,109 @@ async function startServer() {
       res.sendFile(filePath);
     } catch (err: any) {
       res.status(500).json({ success: false, error: err?.message || 'Report download failed' });
+    }
+  });
+
+  // API 8: System Health Endpoint
+  app.get('/api/health', (req, res) => {
+    res.json({
+      status: 'ok',
+      service: 'Quantum Digital Signature Security Analyzer',
+      timestamp: new Date().toISOString(),
+      quantum_engine: 'Simulation-Based Statevector (Qiskit Equivalent)'
+    });
+  });
+
+  // ============================================================================
+  // QUANTUM SECURITY LAB & QDS SIMULATOR API ENDPOINTS
+  // ============================================================================
+
+  // API 9: Qubit Simulation
+  app.get('/api/qds/qubit', (req, res) => {
+    try {
+      const stateType = (req.query.state as string) || 'superposition';
+      const theta = req.query.theta ? parseFloat(req.query.theta as string) : Math.PI / 2;
+      const phi = req.query.phi ? parseFloat(req.query.phi as string) : 0.0;
+      const shots = req.query.shots ? parseInt(req.query.shots as string, 10) : 1024;
+      const result = simulateQubit(stateType, theta, phi, shots);
+      res.json({ success: true, data: result });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err?.message || 'Qubit simulation error' });
+    }
+  });
+
+  // API 10: Bell State Generator
+  app.get('/api/qds/bell', (req, res) => {
+    try {
+      const bellState = (req.query.bell_state as string) || 'Phi+';
+      const shots = req.query.shots ? parseInt(req.query.shots as string, 10) : 1024;
+      const result = simulateBellState(bellState, shots);
+      res.json({ success: true, data: result });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err?.message || 'Bell state simulation error' });
+    }
+  });
+
+  // API 11: Entanglement Verification
+  app.get('/api/qds/entanglement', (req, res) => {
+    try {
+      const shots = req.query.shots ? parseInt(req.query.shots as string, 10) : 1024;
+      const noise = req.query.noise_level ? parseFloat(req.query.noise_level as string) : 0.003;
+      const result = simulateEntanglement(shots, noise);
+      res.json({ success: true, data: result });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err?.message || 'Entanglement simulation error' });
+    }
+  });
+
+  // API 12: Quantum Teleportation
+  app.post('/api/qds/teleportation', (req, res) => {
+    try {
+      const { message_state, custom_theta, shots } = req.body || {};
+      const result = simulateTeleportation(
+        message_state || 'superposition',
+        custom_theta !== undefined ? parseFloat(custom_theta) : undefined,
+        shots || 1024
+      );
+      res.json({ success: true, data: result });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err?.message || 'Teleportation simulation error' });
+    }
+  });
+
+  // API 13: Pauli Correction Lookup
+  app.post('/api/qds/pauli', (req, res) => {
+    try {
+      const { bits } = req.body || {};
+      const result = applyPauliCorrection(bits || '00');
+      res.json({ success: true, data: result });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err?.message || 'Pauli correction error' });
+    }
+  });
+
+  // API 14: Quantum Channel Security & Attacks
+  app.post('/api/qds/channel', (req, res) => {
+    try {
+      const { mode, total_bits, disturbance_level } = req.body || {};
+      const result = simulateQuantumChannel(
+        mode || 'NORMAL',
+        total_bits || 1000,
+        disturbance_level !== undefined ? parseFloat(disturbance_level) : undefined
+      );
+      res.json({ success: true, data: result });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err?.message || 'Channel simulation error' });
+    }
+  });
+
+  // API 15: Complete End-to-End QDS Simulation
+  app.post('/api/qds/simulate', (req, res) => {
+    try {
+      const result = simulateCompleteQds(req.body || {});
+      res.json({ success: true, data: result });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err?.message || 'Complete QDS simulation error' });
     }
   });
 

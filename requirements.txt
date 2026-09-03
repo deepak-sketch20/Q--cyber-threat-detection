@@ -4,3 +4,5 @@ pypdf>=3.9.0
 cryptography>=41.0.0
 reportlab>=4.0.0
 python-dotenv>=1.0.0
+numpy>=1.24.0
+qiskit>=1.0.0

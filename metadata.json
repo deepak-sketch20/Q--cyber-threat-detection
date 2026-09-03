@@ -2,5 +2,7 @@
   "name": "Quantum Digital Signature Security Analyzer",
   "description": "Quantum-Inspired Cyber Threat Detection for Digital Signature Security",
   "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }

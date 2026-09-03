@@ -25,6 +25,8 @@ from threat_detector import (
     parse_quantum_values
 )
 from qds_engine import calculate_quantum_metrics
+import qds_simulator
+import risk_engine
 from forensic_report import generate_forensic_summary, save_forensic_report_files, REPORTS_DIR
 from email_alert import send_automatic_email_alert, get_email_config, log_security_event, SECURITY_EVENTS_LOG_FILE
 
@@ -534,6 +536,114 @@ def get_email_status():
         "smtp_configured": cfg["has_credentials"],
         "is_test_mode": cfg["is_test_mode"]
     })
+
+@app.route('/api/health', methods=['GET'])
+def api_health():
+    """Health check endpoint."""
+    return jsonify({
+        "status": "ok",
+        "service": "Quantum Digital Signature Security Analyzer",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "quantum_engine": "Simulation-Based Statevector (Qiskit Equivalent)"
+    })
+
+# ==============================================================================
+# QUANTUM SECURITY LAB & QDS SIMULATOR API ENDPOINTS
+# ==============================================================================
+
+@app.route('/api/qds/qubit', methods=['GET'])
+def api_qds_qubit():
+    """Simulates a single qubit state (0, 1, superposition, or arbitrary)."""
+    try:
+        state_type = request.args.get('state', 'superposition')
+        theta = float(request.args.get('theta', 1.5707963))
+        phi = float(request.args.get('phi', 0.0))
+        shots = int(request.args.get('shots', 1024))
+        result = qds_simulator.simulate_qubit(state_type=state_type, theta=theta, phi=phi, shots=shots)
+        return jsonify({"success": True, "data": result})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/api/qds/bell', methods=['GET'])
+def api_qds_bell():
+    """Simulates 2-qubit Bell State generation (Phi+, Phi-, Psi+, Psi-)."""
+    try:
+        bell_state = request.args.get('bell_state', 'Phi+')
+        shots = int(request.args.get('shots', 1024))
+        result = qds_simulator.simulate_bell_state(bell_state=bell_state, shots=shots)
+        return jsonify({"success": True, "data": result})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/api/qds/entanglement', methods=['GET'])
+def api_qds_entanglement():
+    """Verifies quantum entanglement correlation and matching statistics."""
+    try:
+        shots = int(request.args.get('shots', 1024))
+        noise_level = float(request.args.get('noise_level', 0.003))
+        result = qds_simulator.simulate_entanglement(shots=shots, noise_level=noise_level)
+        return jsonify({"success": True, "data": result})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/api/qds/teleportation', methods=['POST'])
+def api_qds_teleportation():
+    """Executes 3-qubit quantum teleportation protocol and Pauli corrections."""
+    try:
+        req_data = request.json or {}
+        message_state = req_data.get('message_state', 'superposition')
+        custom_theta = req_data.get('custom_theta')
+        if custom_theta is not None:
+            custom_theta = float(custom_theta)
+        shots = int(req_data.get('shots', 1024))
+        result = qds_simulator.simulate_teleportation(
+            message_state=message_state,
+            custom_theta=custom_theta,
+            shots=shots
+        )
+        return jsonify({"success": True, "data": result})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/api/qds/pauli', methods=['POST'])
+def api_qds_pauli():
+    """Evaluates Pauli correction gate lookup for classical measurement bits."""
+    try:
+        req_data = request.json or {}
+        bits = req_data.get('bits', '00')
+        result = qds_simulator.apply_pauli_correction(bits=bits)
+        return jsonify({"success": True, "data": result})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/api/qds/channel', methods=['POST'])
+def api_qds_channel():
+    """Simulates quantum channel transmission under normal or adversarial attack conditions."""
+    try:
+        req_data = request.json or {}
+        mode = req_data.get('mode', 'NORMAL')
+        total_bits = int(req_data.get('total_bits', 1000))
+        disturbance = req_data.get('disturbance_level')
+        if disturbance is not None:
+            disturbance = float(disturbance)
+        result = qds_simulator.simulate_quantum_channel(
+            mode=mode,
+            total_bits=total_bits,
+            disturbance_level=disturbance
+        )
+        return jsonify({"success": True, "data": result})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/api/qds/simulate', methods=['POST'])
+def api_qds_simulate_complete():
+    """Runs complete end-to-end Quantum Digital Signature simulation workflow."""
+    try:
+        req_data = request.json or {}
+        result = qds_simulator.simulate_complete_qds(req_data)
+        return jsonify({"success": True, "data": result})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
 
 @app.route('/api/cbom/export', methods=['POST'])
 def export_cbom():

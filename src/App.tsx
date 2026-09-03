@@ -38,6 +38,7 @@ import { SAMPLE_DATASETS, analyzeSecurityText, computeSha256 } from './analyzerE
 import { CbomModal } from './components/CbomModal';
 import { CertificateModal } from './components/CertificateModal';
 import { ExecutiveForensicAlert } from './components/ExecutiveForensicAlert';
+import { QuantumSecurityLab } from './components/QuantumSecurityLab';
 
 export default function App() {
   const [data, setData] = useState<AnalysisResponse | null>(null);
@@ -50,7 +51,7 @@ export default function App() {
   const [logFilter, setLogFilter] = useState<'ALL' | 'ALERT' | 'WARNING' | 'VALID'>('ALL');
   const [logSearchQuery, setLogSearchQuery] = useState<string>('');
   const [currentTime, setCurrentTime] = useState<string>('');
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'guide' | 'pqc'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'guide' | 'pqc' | 'quantum-lab'>('dashboard');
   const [isDark, setIsDark] = useState<boolean>(false);
   const [cbomOpen, setCbomOpen] = useState<boolean>(false);
   const [certModalOpen, setCertModalOpen] = useState<boolean>(false);
@@ -335,6 +336,23 @@ export default function App() {
                 <span>{isDark ? 'Light Theme' : 'Dark Theme'}</span>
               </button>
 
+              {/* Quantum Security Lab Tab Button */}
+              <button
+                id="btn-nav-quantum-lab"
+                onClick={() => setActiveTab(activeTab === 'quantum-lab' ? 'dashboard' : 'quantum-lab')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition flex items-center gap-1.5 shadow-sm ${
+                  activeTab === 'quantum-lab'
+                    ? 'bg-gradient-to-r from-cyan-600 to-blue-600 text-white border-cyan-400 shadow-cyan-500/20 ring-1 ring-cyan-400'
+                    : isDark
+                    ? 'bg-cyan-950/60 hover:bg-cyan-900/70 text-cyan-300 border-cyan-500/40'
+                    : 'bg-cyan-50 hover:bg-cyan-100 text-cyan-900 border-cyan-300'
+                }`}
+              >
+                <Atom className={`w-3.5 h-3.5 ${activeTab === 'quantum-lab' ? 'text-white animate-spin-slow' : 'text-cyan-400'}`} />
+                <span>Quantum Security Lab</span>
+                <span className="text-[10px] px-1 py-0.2 rounded font-mono bg-cyan-950 text-cyan-300 border border-cyan-500/30">NEW</span>
+              </button>
+
               {/* CBOM Button */}
               <button
                 onClick={() => setCbomOpen(true)}
@@ -351,7 +369,9 @@ export default function App() {
               <button
                 onClick={() => setActiveTab(activeTab === 'dashboard' ? 'guide' : 'dashboard')}
                 className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition flex items-center gap-1.5 shadow-sm ${
-                  isDark
+                  activeTab === 'guide'
+                    ? 'bg-slate-700 text-white border-slate-500'
+                    : isDark
                     ? 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
                     : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-200'
                 }`}
@@ -434,7 +454,12 @@ export default function App() {
           </div>
         </div>
 
-        {activeTab === 'guide' ? (
+        {activeTab === 'quantum-lab' ? (
+          /* Quantum Security Lab Full Suite View */
+          <div className="w-full max-w-[1720px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
+            <QuantumSecurityLab />
+          </div>
+        ) : activeTab === 'guide' ? (
           /* VS Code Local Execution Guide View */
           <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8">
             <div className={`border rounded-xl p-6 sm:p-8 shadow-sm space-y-6 ${
@@ -864,6 +889,20 @@ export default function App() {
                         {data?.quantum.security_level}
                       </span>
                     </div>
+                  </div>
+
+                  <div className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between">
+                    <button
+                      onClick={() => setActiveTab('quantum-lab')}
+                      className={`w-full py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-2 transition ${
+                        isDark
+                          ? 'bg-cyan-950/70 hover:bg-cyan-900/80 text-cyan-300 border border-cyan-500/40'
+                          : 'bg-cyan-50 hover:bg-cyan-100 text-cyan-900 border border-cyan-300'
+                      }`}
+                    >
+                      <Atom className="w-3.5 h-3.5 text-cyan-500 animate-spin-slow" />
+                      <span>Launch Quantum Security Lab (Qubit, Bell, Teleportation & QBER)</span>
+                    </button>
                   </div>
 
                   <p className={`mt-2.5 text-[10.5px] text-center italic ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
