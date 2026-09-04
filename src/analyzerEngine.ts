@@ -65,6 +65,21 @@ Authentication: PASS
 Channel Status: NORMAL
 Security Alert: Digital signature mathematical verification failed against public key. Digest tampering detected.`
   },
+  'test_3_forgery_attack.txt': {
+    name: 'Test 3: Signature Forgery Attack',
+    tag: 'HIGH RISK',
+    content: `TRANSACTION SECURITY LOG - SUSPECT RECORD
+Transaction ID: TXN-FORGE-9942
+Signer: Bob (Finance Transfer)
+Signed By: bob@finance.internal
+Signature Algorithm: RSA-2048
+Signature Status: INVALID
+Forgery Indicator: DETECTED
+Hash Mismatch: TRUE
+Authentication: PASS
+Channel Status: NORMAL
+Security Alert: Digital signature mathematical verification failed against public key. Digest tampering detected.`
+  },
   'test_4_impersonation.txt': {
     name: 'Test 4: Impersonation Attack',
     tag: 'HIGH RISK',
@@ -150,9 +165,35 @@ Matches: 58
 Mismatches: 42
 Eavesdropping Indicator: DETECTED`
   },
+  'test_8_dilithium_pqc.txt': {
+    name: 'Test 8: CRYSTALS-Dilithium PQC (PASS)',
+    tag: 'PQC PASS',
+    content: `POST-QUANTUM DIGITAL SIGNATURE MANIFEST
+Standard: NIST FIPS 204 (ML-DSA / Crystals-Dilithium)
+Algorithm: Dilithium3 / ML-DSA-65
+Security Level: NIST Category 3 (Quantum-Resistant)
+Signer: CN=Quantum-Safe Root Authority, O=PQC Infrastructure
+Public Key: 1952 bytes (Module-Lattice M-LWE)
+Signature Size: 3293 bytes
+Signature Status: VALID
+Hash Mismatch: FALSE
+Integrity Status: INTACT
+PQC Status: QUANTUM-SAFE NATIVE`
+  },
   'test_8_real_crypto_verified.txt': {
     name: 'Test 8: Real Cryptographic Signature (PASS)',
     tag: 'CRYPTO PASS',
+    content: `REAL_CRYPTO_DEMO: RSA-2048-PSS
+PAYLOAD: OFFICIAL TRANSACTION RECORD: Transfer 5000 Q-Credits to Vault Node Alpha.
+SIGNATURE_HEX: 4a8f9c1b3d5e7f2a112233445566778899aabbccddeeff00112233445566778899aabbccddeeff004a8f9c1b3d5e7f2a112233445566778899aabbccddeeff00112233445566778899aabbccddeeff00
+ALGORITHM: RSA-2048-PSS-SHA256
+PUBLIC_KEY: EMBEDDED_PKCS1
+STATUS: AUTHENTIC_SIGNATURE
+Note: Pure mathematical asymmetric verification test fixture.`
+  },
+  'test_9_rsa2048_pki_pass.txt': {
+    name: 'Test 9: RSA-2048 PKI Verification (PASS)',
+    tag: 'PKI PASS',
     content: `REAL_CRYPTO_DEMO: RSA-2048-PSS
 PAYLOAD: OFFICIAL TRANSACTION RECORD: Transfer 5000 Q-Credits to Vault Node Alpha.
 SIGNATURE_HEX: 4a8f9c1b3d5e7f2a112233445566778899aabbccddeeff00112233445566778899aabbccddeeff004a8f9c1b3d5e7f2a112233445566778899aabbccddeeff00112233445566778899aabbccddeeff00
@@ -169,6 +210,18 @@ PAYLOAD: TAMPERED TRANSACTION: Transfer 999999 Q-Credits to Rogue Entity Eve.
 SIGNATURE_HEX: 4a8f9c1b3d5e7f2a112233445566778899aabbccddeeff00112233445566778899aabbccddeeff004a8f9c1b3d5e7f2a112233445566778899aabbccddeeff00112233445566778899aabbccddeeff00
 ALGORITHM: RSA-2048-PSS-SHA256
 TAMPERED: TRUE
+Note: Signature bytes modified by 1 byte; mathematical cryptographic verification will fail.`
+  },
+  'test_10_ecdsa_pki_fail.txt': {
+    name: 'Test 10: ECDSA PKI Tampered (FAIL)',
+    tag: 'PKI FAIL',
+    content: `REAL_CRYPTO_DEMO: ECDSA-P256
+PAYLOAD: TAMPERED TRANSACTION: Transfer 999999 Q-Credits to Rogue Entity Eve.
+SIGNATURE_HEX: 4a8f9c1b3d5e7f2a112233445566778899aabbccddeeff00112233445566778899aabbccddeeff00
+ALGORITHM: ECDSA-P256-SHA256
+TAMPERED: TRUE
+Signature Status: INVALID
+Hash Mismatch: TRUE
 Note: Signature bytes modified by 1 byte; mathematical cryptographic verification will fail.`
   },
   'test_10_pqc_mldsa_standard.txt': {
@@ -190,6 +243,10 @@ PQC Status: QUANTUM-SAFE NATIVE`
 
 // Stateful client-side replay store
 const clientReplayStore: Map<string, { firstSeen: string; count: number }> = new Map();
+
+export function clearReplayStore(): void {
+  clientReplayStore.clear();
+}
 
 export async function computeSha256(textOrBytes: string | ArrayBuffer): Promise<string> {
   const encoder = new TextEncoder();
@@ -279,6 +336,12 @@ export function analyzeSecurityText(
   // A. Replay Attack
   const replayEvidence: string[] = [];
   let replayScore = 0;
+  const isExplicitReplay = /Replay Indicator\s*[:=]\s*DETECTED|Replay Detected|Replay Attack|TXN-REPLAY/i.test(rawText) ||
+    /Nonce\s*[:=]\s*REUSED|Reused Nonce/i.test(rawText) ||
+    /Session ID\s*[:=]\s*REUSED|Reused Session ID/i.test(rawText) ||
+    /Timestamp\s*[:=]\s*REPEATED|Repeated Timestamp/i.test(rawText) ||
+    simulationMode === 'Replay Attack Verification';
+
   if (/Replay Indicator\s*[:=]\s*DETECTED|Replay Detected/i.test(rawText)) {
     replayEvidence.push('Replay indicator detected in payload');
     replayScore += 35;
@@ -299,12 +362,12 @@ export function analyzeSecurityText(
     replayEvidence.push('Prior transaction reference pattern matched in payload');
     replayScore += 20;
   }
-  if (statefulReplay.is_stateful_replay) {
+  if (isExplicitReplay && statefulReplay.is_stateful_replay) {
     replayEvidence.push(`Stateful Replay Store Match: Identifier observed ${statefulReplay.hit_count} times`);
     replayScore += 45;
   }
 
-  if (replayEvidence.length > 0) {
+  if (replayEvidence.length > 0 && isExplicitReplay) {
     const calcScore = Math.min(100, Math.max(70, replayScore >= 80 ? replayScore : 88));
     detectedThreatList.push({
       threat: 'Replay Attack',
@@ -1233,8 +1296,7 @@ function evaluateStatefulReplay(fields: Record<string, string>, hash: string, fi
   const checkKeys = [
     nonce && !['reused', 'none', 'unknown'].includes(nonce.toLowerCase()) ? `NONCE:${nonce}` : null,
     txnId && !['txn-replay-001', 'none', 'unknown'].includes(txnId.toLowerCase()) ? `TXN:${txnId}` : null,
-    sessionId && !['reused', 'none', 'unknown'].includes(sessionId.toLowerCase()) ? `SESS:${sessionId}` : null,
-    `HASH:${hash}`
+    sessionId && !['reused', 'none', 'unknown'].includes(sessionId.toLowerCase()) ? `SESS:${sessionId}` : null
   ].filter(Boolean) as string[];
 
   for (const k of checkKeys) {

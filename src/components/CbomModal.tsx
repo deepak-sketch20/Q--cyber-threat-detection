@@ -6,10 +6,10 @@ interface CbomModalProps {
   cbom?: CBOMData;
   isOpen: boolean;
   onClose: () => void;
-  isDark: boolean;
+  isDark?: boolean;
 }
 
-export const CbomModal: React.FC<CbomModalProps> = ({ cbom, isOpen, onClose, isDark }) => {
+export const CbomModal: React.FC<CbomModalProps> = ({ cbom, isOpen, onClose }) => {
   const [copied, setCopied] = useState(false);
 
   if (!isOpen || !cbom) return null;
@@ -33,59 +33,49 @@ export const CbomModal: React.FC<CbomModalProps> = ({ cbom, isOpen, onClose, isD
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
-      <div className={`w-full max-w-3xl rounded-xl border shadow-2xl flex flex-col max-h-[90vh] overflow-hidden ${
-        isDark ? 'bg-[#0f172a] border-slate-700 text-slate-100' : 'bg-white border-slate-200 text-slate-900'
-      }`}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
+      <div className="w-full max-w-3xl rounded-md border border-[#DADCE0] bg-white text-[#202124] shadow-lg flex flex-col max-h-[90vh] overflow-hidden">
         {/* Header */}
-        <div className={`flex items-center justify-between px-5 py-4 border-b ${
-          isDark ? 'border-slate-800 bg-slate-900/80' : 'border-slate-200 bg-slate-50'
-        }`}>
-          <div className="flex items-center gap-2.5">
-            <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-              isDark ? 'bg-cyan-500/20 text-cyan-300' : 'bg-slate-900 text-white'
-            }`}>
-              <FileCode className="w-4 h-4" />
+        <div className="flex items-center justify-between px-4 py-3 border-b border-[#DADCE0] bg-[#F5F6F8]">
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-6 rounded bg-[#2457A6] text-white flex items-center justify-center">
+              <FileCode className="w-3.5 h-3.5" />
             </div>
             <div>
-              <h3 className="text-sm font-bold">CycloneDX Cryptography Bill of Materials (CBOM)</h3>
-              <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+              <h3 className="text-xs font-bold uppercase tracking-wider text-[#202124]">
+                CycloneDX Cryptography Bill of Materials (CBOM)
+              </h3>
+              <p className="text-[11px] text-[#5F6368]">
                 Specification v1.6 &bull; Automated Cryptographic Asset Inventory
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className={`p-1.5 rounded-lg border transition ${
-              isDark ? 'hover:bg-slate-800 border-slate-700 text-slate-400' : 'hover:bg-slate-100 border-slate-200 text-slate-500'
-            }`}
+            className="p-1 rounded border border-[#DADCE0] hover:bg-[#E8EAED] text-[#5F6368] cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Content */}
-        <div className="p-5 overflow-y-auto space-y-4 font-mono text-xs">
-          <div className={`p-3 rounded-lg border flex items-center justify-between ${
-            isDark ? 'bg-slate-900 border-slate-800 text-slate-300' : 'bg-slate-50 border-slate-200 text-slate-700'
-          }`}>
-            <div>
-              <span className="font-bold text-cyan-400">Spec Format:</span> CycloneDX v1.6 &nbsp;|&nbsp;
-              <span className="font-bold text-cyan-400"> Serial:</span> {cbom.serialNumber.substring(0, 24)}...
+        <div className="p-4 overflow-y-auto space-y-3 font-mono text-xs">
+          <div className="p-2.5 rounded border border-[#DADCE0] bg-[#F5F6F8] flex items-center justify-between">
+            <div className="text-[11px]">
+              <span className="font-bold text-[#202124]">Format:</span> CycloneDX v1.6 &nbsp;|&nbsp;
+              <span className="font-bold text-[#202124]"> Serial:</span> {cbom.serialNumber.substring(0, 24)}...
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
               <button
                 onClick={handleCopy}
-                className={`px-2.5 py-1 rounded text-xs font-sans font-semibold border flex items-center gap-1 transition ${
-                  isDark ? 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-200' : 'bg-white hover:bg-slate-100 border-slate-300 text-slate-700'
-                }`}
+                className="px-2.5 py-1 rounded text-xs font-sans font-medium border border-[#DADCE0] bg-white hover:bg-[#F5F6F8] text-[#202124] flex items-center gap-1 cursor-pointer transition"
               >
-                {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                {copied ? <Check className="w-3.5 h-3.5 text-[#2E7D32]" /> : <Copy className="w-3.5 h-3.5" />}
                 {copied ? 'Copied' : 'Copy JSON'}
               </button>
               <button
                 onClick={handleDownload}
-                className="px-2.5 py-1 rounded text-xs font-sans font-semibold bg-cyan-600 hover:bg-cyan-500 text-white flex items-center gap-1 transition"
+                className="px-2.5 py-1 rounded text-xs font-sans font-semibold bg-[#2457A6] hover:bg-[#1E4B8F] text-white flex items-center gap-1 cursor-pointer transition"
               >
                 <Download className="w-3.5 h-3.5" />
                 Download JSON
@@ -93,23 +83,48 @@ export const CbomModal: React.FC<CbomModalProps> = ({ cbom, isOpen, onClose, isD
             </div>
           </div>
 
-          <pre className={`p-4 rounded-xl border overflow-x-auto max-h-[50vh] text-[11px] leading-relaxed ${
-            isDark ? 'bg-slate-950 border-slate-800 text-emerald-300' : 'bg-slate-900 border-slate-800 text-emerald-400'
-          }`}>
+          <pre className="p-3 rounded border border-[#DADCE0] bg-[#F5F6F8] text-[#202124] overflow-x-auto max-h-[50vh] text-[11px] leading-relaxed">
             {cbomJsonString}
           </pre>
+
+          {/* Table summary */}
+          <div className="border border-[#DADCE0] rounded overflow-hidden">
+            <table className="w-full text-left text-xs border-collapse font-sans">
+              <thead>
+                <tr className="bg-[#F5F6F8] border-b border-[#DADCE0] text-[#5F6368] font-bold">
+                  <th className="py-1.5 px-3">Asset Type</th>
+                  <th className="py-1.5 px-3">Name / Algorithm</th>
+                  <th className="py-1.5 px-3">OID / Classical Security</th>
+                  <th className="py-1.5 px-3">PQC Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#DADCE0] font-mono text-[11px]">
+                {(cbom.components || []).map((c, i) => (
+                  <tr key={i} className="hover:bg-[#F5F6F8]">
+                    <td className="py-1.5 px-3 text-[#5F6368]">{c.type}</td>
+                    <td className="py-1.5 px-3 font-semibold text-[#202124]">{c.name}</td>
+                    <td className="py-1.5 px-3 text-[#5F6368]">{c.cryptoProperties?.oid || c.cryptoProperties?.algorithmProperties?.classicalSecurityLevel || 'N/A'}</td>
+                    <td className="py-1.5 px-3">
+                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold border ${
+                        c.cryptoProperties?.algorithmProperties?.nistQuantumSecurityLevel
+                          ? 'bg-[#E8F5E9] text-[#2E7D32] border-[#C8E6C9]'
+                          : 'bg-[#FFF3E0] text-[#B26A00] border-[#FFE0B2]'
+                      }`}>
+                        {c.cryptoProperties?.algorithmProperties?.nistQuantumSecurityLevel ? 'PQC NIST Standard' : 'Vulnerable to Shor\'s'}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
 
         {/* Footer */}
-        <div className={`px-5 py-3 border-t flex justify-between items-center text-xs ${
-          isDark ? 'border-slate-800 bg-slate-900/50 text-slate-400' : 'border-slate-200 bg-slate-50 text-slate-500'
-        }`}>
-          <span>Adheres to CycloneDX Cryptographic Assets standard for quantum migration.</span>
+        <div className="px-4 py-2.5 border-t border-[#DADCE0] bg-[#F5F6F8] flex justify-end">
           <button
             onClick={onClose}
-            className={`px-3 py-1.5 rounded-lg font-semibold border ${
-              isDark ? 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-200' : 'bg-white hover:bg-slate-100 border-slate-300 text-slate-700'
-            }`}
+            className="px-3.5 py-1.5 rounded border border-[#DADCE0] bg-white hover:bg-[#F5F6F8] text-xs font-semibold text-[#202124] cursor-pointer"
           >
             Close
           </button>
