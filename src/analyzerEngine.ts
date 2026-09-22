@@ -6,8 +6,22 @@ import {
   CertificateAnalysisInfo,
   StatefulReplayInfo,
   PostQuantumAssessment,
-  CBOMData
+  CBOMData,
+  AdaptiveThresholdResult,
+  EvidenceItem,
+  EvidenceTimelineItem
 } from './types';
+import {
+  calculateAdaptiveThreshold,
+  generateGenuineSimulationMeasurements,
+  deriveCandidateMeasurement,
+  deriveCandidateMeasurementWithLocation
+} from './adaptiveThreshold';
+import {
+  parseTextLines,
+  extractThreatEvidenceLocations,
+  buildEvidenceTimeline
+} from './evidenceEngine';
 
 export const SAMPLE_DATASETS: Record<string, { name: string; tag: string; content: string }> = {
   'test_1_secure.txt': {
@@ -330,6 +344,34 @@ export function analyzeSecurityText(
 
   const hashMismatch = /Hash Mismatch\s*[:=]\s*TRUE|Digest Mismatch|Integrity Violation/i.test(rawText) || cryptoVerif.mathematical_verification === 'FAILED';
 
+  // 5b. Statistical Calibration & Adaptive Statistical Threshold
+  // Collect 25 genuine signer simulation batches from the existing QDS simulation engine (zero hardcoding)
+  const genuineMeasurements = generateGenuineSimulationMeasurements(25, 1024);
+
+  // Preliminary threat heuristic to derive candidate measurement
+  let prelimThreat = 'Normal';
+  if (/Replay Indicator\s*[:=]\s*DETECTED|TXN-REPLAY|Nonce\s*[:=]\s*REUSED/i.test(rawText)) prelimThreat = 'Replay';
+  else if (/Forgery Indicator\s*[:=]\s*DETECTED|Signature Status\s*[:=]\s*INVALID|Hash Mismatch\s*[:=]\s*TRUE|Digest Mismatch/i.test(rawText) || cryptoVerif.mathematical_verification === 'FAILED') prelimThreat = 'Forgery';
+  else if (/Impersonation Indicator\s*[:=]\s*DETECTED|Unknown User|Rogue Signer|Authentication\s*[:=]\s*FAILED/i.test(rawText)) prelimThreat = 'Impersonation';
+  else if (/Entangle-and-Measure|Eavesdropping/i.test(rawText)) prelimThreat = 'Entangle-and-Measure';
+  else if (/Intercept-Resend/i.test(rawText)) prelimThreat = 'Intercept-Resend';
+  else if (/Quantum Channel Manipulation|Channel Status\s*[:=]\s*MANIPULATED/i.test(rawText)) prelimThreat = 'Quantum Channel Manipulation';
+
+  const qberQuickMatch = rawText.match(/QBER\s*[:=]\s*([0-9]*\.?[0-9]+)/i);
+  const qberQuickVal = qberQuickMatch ? parseFloat(qberQuickMatch[1]) : undefined;
+
+  const candidateMeasurementLoc = deriveCandidateMeasurementWithLocation(
+    prelimThreat,
+    rawText,
+    { qber: qberQuickVal }
+  );
+
+  const adaptiveThreshold = calculateAdaptiveThreshold(
+    genuineMeasurements,
+    candidateMeasurementLoc.value,
+    candidateMeasurementLoc
+  );
+
   // 6. Comprehensive Threat Analysis (Evidence-Weighted)
   const detectedThreatList: any[] = [];
 
@@ -402,8 +444,15 @@ export function analyzeSecurityText(
     forgeryEvidence.push('Signed hash mismatch with recalculated payload digest');
     forgeryScore += 30;
   }
+  if (adaptiveThreshold.statisticalAnomaly) {
+    forgeryEvidence.push(`Adaptive Statistical Threshold: Statistical Anomaly Detected (${adaptiveThreshold.currentMeasurement.toFixed(2)}% outside calibrated range [${adaptiveThreshold.lowerThreshold.toFixed(2)}% — ${adaptiveThreshold.upperThreshold.toFixed(2)}%])`);
+    if (forgeryScore > 0) {
+      forgeryScore += 15;
+    }
+  }
 
-  if (forgeryEvidence.length > 0) {
+  // Only trigger Forgery threat if there is actual cryptographic forgery evidence
+  if (forgeryScore > 0) {
     const calcScore = Math.min(100, Math.max(85, forgeryScore));
     detectedThreatList.push({
       threat: 'Forgery',
@@ -711,6 +760,27 @@ export function analyzeSecurityText(
   // 10. CycloneDX CBOM Generation
   const cbom = generateCBOMData(filename, sha256Hash, pqcAssessment, certInfo);
 
+  // 10.5 Attack Evidence Location & Line-Level Forensic Analysis
+  const { lines: parsedFileLines, isBinary: detectedIsBinary } = parseTextLines(rawText);
+  const evidenceItems: EvidenceItem[] = extractThreatEvidenceLocations(
+    parsedFileLines,
+    filename,
+    rawText,
+    cryptoVerif,
+    certInfo,
+    statefulReplay,
+    quantumMetrics,
+    adaptiveThreshold,
+    detectedIsBinary
+  );
+
+  primaryThreat.evidence_items = evidenceItems;
+
+  const evidenceTimeline: EvidenceTimelineItem[] = buildEvidenceTimeline(
+    evidenceItems,
+    parsedFileLines
+  );
+
   // 11. Complete 8-row Attack Matrix
   const attackScenarios = [
     { attack: 'Normal', reason: 'Baseline valid signature and channel operation', defaultScore: 5 },
@@ -984,7 +1054,10 @@ See attached Executive Forensic Summary for complete details.`;
       };
 
   // 13. Tamper-Evident Chained Audit Logging
-  const nowStr = new Date().toISOString().substring(11, 19);
+  const padTwo = (n: number) => String(n).padStart(2, '0');
+  const now = new Date();
+  const nowStr = `${padTwo(now.getHours())}:${padTwo(now.getMinutes())}:${padTwo(now.getSeconds())}`;
+  const localUploadTime = `${now.getFullYear()}-${padTwo(now.getMonth() + 1)}-${padTwo(now.getDate())} ${nowStr}`;
   const formattedSize = fileSizeBytes > 1024 ? `${(fileSizeBytes / 1024).toFixed(2)} KB` : `${fileSizeBytes} bytes`;
 
   const rawAuditEvents = [
@@ -1023,7 +1096,7 @@ See attached Executive Forensic Summary for complete details.`;
       file_type: filename.split('.').pop()?.toUpperCase() || 'TXT',
       file_size: formattedSize,
       file_size_bytes: fileSizeBytes,
-      upload_time: new Date().toISOString().replace('T', ' ').substring(0, 19),
+      upload_time: localUploadTime,
       sha256: sha256Hash,
       sha256_computation: 'SUCCESS',
       reference_hash: referenceHash || 'None provided',
@@ -1053,9 +1126,12 @@ See attached Executive Forensic Summary for complete details.`;
     },
     threat: primaryThreat,
     quantum: quantumMetrics,
+    adaptive_threshold: adaptiveThreshold,
     post_quantum_assessment: pqcAssessment,
     cbom,
     attack_table: attackTable,
+    evidence: evidenceItems,
+    evidence_timeline: evidenceTimeline,
     logs,
     forensic_summary: forensicSummary,
     email_alert: emailAlert,

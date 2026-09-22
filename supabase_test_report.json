@@ -1,0 +1,64 @@
+{
+  "timestamp": "2026-09-18T06:08:55.694754+00:00",
+  "step_1_connection": {
+    "status": "PASS",
+    "message": "Supabase endpoint reachable and authentication headers validated.",
+    "url": "https://vzdeufgteanqsbrqxsax.supabase.co"
+  },
+  "step_2_table_accessibility": {
+    "status": "PASS",
+    "message": "Table 'security_analyses' is accessible and queryable.",
+    "existing_records_count": 1
+  },
+  "step_3_bucket_accessibility": {
+    "status": "PASS",
+    "message": "Storage bucket 'qsecure-files' is accessible with read and write permissions verified.",
+    "bucket": "qsecure-files",
+    "bucket_id": "qsecure-files"
+  },
+  "step_4_create_test_record": {
+    "status": "PASS",
+    "message": "Created test analysis record successfully in Supabase (ID: 4).",
+    "test_case_id": "TEST-CASE-QSECURE-1789711736938",
+    "inserted_id": 4,
+    "details": {
+      "file_name": "TEST_INTEGRITY_PROBE.bin",
+      "file_size": 2048,
+      "file_hash_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "signature_status": "TEST_VERIFIED_VALID",
+      "threat_score": 0,
+      "threats_detected": [
+        "TEST_BENIGN_HARNESS_PROBE"
+      ],
+      "attack_type": "None (Verification Test)",
+      "timestamp": "2026-09-18T06:08:56.938222+00:00",
+      "storage_path": "qsecure-files/TEST-CASE-QSECURE-1789711736938/TEST_INTEGRITY_PROBE.bin",
+      "analysis_summary": {
+        "case_id": "TEST-CASE-QSECURE-1789711736938",
+        "overall_status": "TEST_SECURE",
+        "primary_threat": "None",
+        "risk_level": "LOW",
+        "threats_detected": [
+          "TEST_BENIGN_HARNESS_PROBE"
+        ],
+        "recommendation": "Verification test record created by automated test suite. Integrity confirmed."
+      }
+    }
+  },
+  "step_5_confirm_test_record": {
+    "status": "PASS",
+    "message": "Confirmed that the record appears in Supabase table 'security_analyses'.",
+    "retrieved_record": {
+      "id": 4,
+      "file_name": "TEST_INTEGRITY_PROBE.bin",
+      "file_size": 2048,
+      "file_hash_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "signature_status": "TEST_VERIFIED_VALID",
+      "threat_score": 0,
+      "timestamp": "2026-09-18T06:08:56.938222+00:00",
+      "storage_path": "qsecure-files/TEST-CASE-QSECURE-1789711736938/TEST_INTEGRITY_PROBE.bin",
+      "analysis_summary": "{\"case_id\": \"TEST-CASE-QSECURE-1789711736938\", \"overall_status\": \"TEST_SECURE\", \"primary_threat\": \"None\", \"risk_level\": \"LOW\", \"threats_detected\": [\"TEST_BENIGN_HARNESS_PROBE\"], \"recommendation\": \"Verification test record created by automated test suite. Integrity confirmed.\"}"
+    }
+  },
+  "overall_result": "PASS"
+}

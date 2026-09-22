@@ -1,38 +1,381 @@
 @import "tailwindcss";
 
 :root {
-  --bg-primary: #F5F6F8;
-  --bg-secondary: #FFFFFF;
-  --text-primary: #202124;
-  --text-secondary: #5F6368;
-  --border-color: #DADCE0;
-  --action-primary: #2457A6;
-  --action-hover: #1E4B8F;
-  --color-success: #2E7D32;
-  --color-warning: #B26A00;
-  --color-danger: #C62828;
+  --bg-primary: #0B0F19;
+  --bg-surface: #111827;
+  --bg-surface-elevated: #162032;
+  --bg-nav: #0E1526;
+  --bg-interactive: #131B2E;
+  --text-primary: #F1F5F9;
+  --text-secondary: #94A3B8;
+  --text-muted: #64748B;
+  --border-color: #1E293B;
+  --border-subtle: #334155;
+  --action-primary: #0284C7;
+  --action-hover: #0369A1;
+  --color-success: #10B981;
+  --color-warning: #F59E0B;
+  --color-danger: #EF4444;
+}
+
+html.light, body.light, .light {
+  --bg-primary: #F8FAFC;
+  --bg-surface: #FFFFFF;
+  --bg-surface-elevated: #F1F5F9;
+  --bg-nav: #FFFFFF;
+  --bg-interactive: #E2E8F0;
+  --text-primary: #0F172A;
+  --text-secondary: #475569;
+  --text-muted: #64748B;
+  --border-color: #E2E8F0;
+  --border-subtle: #CBD5E1;
+  --action-primary: #0284C7;
+  --action-hover: #0369A1;
+  --color-success: #059669;
+  --color-warning: #D97706;
+  --color-danger: #DC2626;
 }
 
 body {
-  background-color: #F5F6F8;
-  color: #202124;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+  background-color: #0B0F19;
+  color: #F1F5F9;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
 
-/* Custom scrollbar for technical logs and tables */
+html.light body,
+body.light {
+  background-color: #F8FAFC;
+  color: #0F172A;
+}
+
+code, pre, .font-mono {
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
+}
+
+/* Custom scrollbars */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: #F1F3F4;
+  background: #0B0F19;
 }
 ::-webkit-scrollbar-thumb {
-  background: #DADCE0;
+  background: #1E293B;
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #BCC1C8;
+  background: #334155;
 }
+
+html.light ::-webkit-scrollbar-track,
+body.light ::-webkit-scrollbar-track {
+  background: #F1F5F9;
+}
+html.light ::-webkit-scrollbar-thumb,
+body.light ::-webkit-scrollbar-thumb {
+  background: #CBD5E1;
+}
+html.light ::-webkit-scrollbar-thumb:hover,
+body.light ::-webkit-scrollbar-thumb:hover {
+  background: #94A3B8;
+}
+
+/* ========================================================================= */
+/* LIGHT MODE ADAPTIVE SOC RULES                                            */
+/* ========================================================================= */
+
+/* Background overrides */
+html.light .bg-\[\#0B0F19\],
+.light .bg-\[\#0B0F19\] {
+  background-color: #F8FAFC !important;
+}
+html.light .bg-\[\#0E1526\],
+.light .bg-\[\#0E1526\] {
+  background-color: #FFFFFF !important;
+}
+html.light .bg-\[\#111827\],
+.light .bg-\[\#111827\] {
+  background-color: #FFFFFF !important;
+}
+html.light .bg-\[\#162032\],
+.light .bg-\[\#162032\] {
+  background-color: #F1F5F9 !important;
+}
+html.light .bg-\[\#162032\]\/50,
+.light .bg-\[\#162032\]\/50 {
+  background-color: #F8FAFC !important;
+}
+html.light .bg-\[\#131B2E\],
+.light .bg-\[\#131B2E\] {
+  background-color: #F1F5F9 !important;
+}
+html.light .bg-\[\#131B2E\]\/50,
+.light .bg-\[\#131B2E\]\/50 {
+  background-color: #F8FAFC !important;
+}
+
+/* Hover background overrides */
+html.light .hover\:bg-\[\#1E293B\]:hover,
+.light .hover\:bg-\[\#1E293B\]:hover {
+  background-color: #E2E8F0 !important;
+}
+html.light .hover\:bg-\[\#162032\]:hover,
+.light .hover\:bg-\[\#162032\]:hover {
+  background-color: #E2E8F0 !important;
+}
+html.light .hover\:bg-\[\#162032\]\/60:hover,
+.light .hover\:bg-\[\#162032\]\/60:hover {
+  background-color: #F1F5F9 !important;
+}
+html.light .hover\:bg-\[\#131B2E\]\/50:hover,
+.light .hover\:bg-\[\#131B2E\]\/50:hover {
+  background-color: #F1F5F9 !important;
+}
+
+/* Border overrides */
+html.light .border-\[\#1E293B\],
+.light .border-\[\#1E293B\] {
+  border-color: #E2E8F0 !important;
+}
+html.light .border-b-\[\#1E293B\],
+.light .border-b-\[\#1E293B\] {
+  border-bottom-color: #E2E8F0 !important;
+}
+html.light .border-t-\[\#1E293B\],
+.light .border-t-\[\#1E293B\] {
+  border-top-color: #E2E8F0 !important;
+}
+html.light .border-\[\#334155\],
+.light .border-\[\#334155\] {
+  border-color: #CBD5E1 !important;
+}
+html.light .divide-\[\#1E293B\] > :not([hidden]) ~ :not([hidden]),
+.light .divide-\[\#1E293B\] > :not([hidden]) ~ :not([hidden]) {
+  border-color: #E2E8F0 !important;
+}
+
+/* Text color overrides */
+html.light .text-\[\#F1F5F9\],
+.light .text-\[\#F1F5F9\] {
+  color: #0F172A !important;
+}
+html.light .text-\[\#E2E8F0\],
+.light .text-\[\#E2E8F0\] {
+  color: #0F172A !important;
+}
+html.light .text-\[\#94A3B8\],
+.light .text-\[\#94A3B8\] {
+  color: #475569 !important;
+}
+html.light .text-\[\#64748B\],
+.light .text-\[\#64748B\] {
+  color: #64748B !important;
+}
+html.light .text-\[\#38BDF8\],
+.light .text-\[\#38BDF8\] {
+  color: #0284C7 !important;
+}
+
+/* Hover text overrides */
+html.light .hover\:text-\[\#F1F5F9\]:hover,
+.light .hover\:text-\[\#F1F5F9\]:hover {
+  color: #0F172A !important;
+}
+html.light .hover\:text-\[\#38BDF8\]:hover,
+.light .hover\:text-\[\#38BDF8\]:hover {
+  color: #0369A1 !important;
+}
+html.light .group:hover .group-hover\:text-\[\#38BDF8\],
+.light .group:hover .group-hover\:text-\[\#38BDF8\] {
+  color: #0284C7 !important;
+}
+html.light .group:hover .group-hover\:text-\[\#F1F5F9\],
+.light .group:hover .group-hover\:text-\[\#F1F5F9\] {
+  color: #0F172A !important;
+}
+
+/* Status badges & pill tags */
+html.light .bg-\[\#064E3B\]\/40,
+html.light .bg-\[\#064E3B\]\/30,
+html.light .bg-\[\#064E3B\]\/20,
+.light .bg-\[\#064E3B\]\/40,
+.light .bg-\[\#064E3B\]\/30,
+.light .bg-\[\#064E3B\]\/20 {
+  background-color: #DCFCE7 !important;
+}
+html.light .border-\[\#065F46\],
+.light .border-\[\#065F46\] {
+  border-color: #86EFAC !important;
+}
+html.light .text-\[\#34D399\],
+.light .text-\[\#34D399\] {
+  color: #15803D !important;
+}
+
+html.light .bg-\[\#78350F\]\/40,
+html.light .bg-\[\#78350F\]\/30,
+.light .bg-\[\#78350F\]\/40,
+.light .bg-\[\#78350F\]\/30 {
+  background-color: #FEF3C7 !important;
+}
+html.light .border-\[\#92400E\],
+.light .border-\[\#92400E\] {
+  border-color: #FDE68A !important;
+}
+html.light .text-\[\#FBBF24\],
+.light .text-\[\#FBBF24\] {
+  color: #B45309 !important;
+}
+
+html.light .bg-\[\#7F1D1D\]\/40,
+html.light .bg-\[\#7F1D1D\]\/30,
+.light .bg-\[\#7F1D1D\]\/40,
+.light .bg-\[\#7F1D1D\]\/30 {
+  background-color: #FEE2E2 !important;
+}
+html.light .border-\[\#991B1B\],
+.light .border-\[\#991B1B\] {
+  border-color: #FECACA !important;
+}
+html.light .text-\[\#F87171\],
+.light .text-\[\#F87171\] {
+  color: #DC2626 !important;
+}
+
+html.light .bg-\[\#0284C7\]\/20,
+html.light .bg-\[\#0284C7\]\/15,
+.light .bg-\[\#0284C7\]\/20,
+.light .bg-\[\#0284C7\]\/15 {
+  background-color: #E0F2FE !important;
+}
+html.light .border-\[\#0284C7\]\/40,
+html.light .border-\[\#0284C7\]\/30,
+.light .border-\[\#0284C7\]\/40,
+.light .border-\[\#0284C7\]\/30 {
+  border-color: #BAE6FD !important;
+}
+
+/* Form controls & code in Light Mode */
+html.light input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+html.light select,
+html.light textarea,
+.light input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+.light select,
+.light textarea {
+  background-color: #FFFFFF !important;
+  color: #0F172A !important;
+  border-color: #CBD5E1 !important;
+}
+
+html.light pre,
+html.light code:not(.bg-transparent),
+.light pre,
+.light code:not(.bg-transparent) {
+  background-color: #F1F5F9 !important;
+  color: #0F172A !important;
+  border-color: #E2E8F0 !important;
+}
+
+/* Modals backdrop */
+html.light .bg-black\/70,
+html.light .bg-black\/60,
+.light .bg-black\/70,
+.light .bg-black\/60 {
+  background-color: rgba(15, 23, 42, 0.45) !important;
+}
+
+/* Header badges and pills in Light Mode */
+html.light #database-status-badge,
+.light #database-status-badge,
+html.light #header-live-clock,
+.light #header-live-clock,
+html.light #theme-mode-toggle,
+.light #theme-mode-toggle {
+  background-color: #FFFFFF !important;
+  border-color: #CBD5E1 !important;
+  color: #0F172A !important;
+}
+
+html.light #database-status-badge:hover,
+.light #database-status-badge:hover,
+html.light #header-live-clock:hover,
+.light #header-live-clock:hover,
+html.light #theme-mode-toggle:hover,
+.light #theme-mode-toggle:hover {
+  background-color: #F8FAFC !important;
+  border-color: #0284C7 !important;
+}
+
+html.light #database-status-badge span.font-mono,
+.light #database-status-badge span.font-mono,
+html.light #header-live-clock span.font-sans,
+.light #header-live-clock span.font-sans {
+  background-color: #F1F5F9 !important;
+  border-color: #CBD5E1 !important;
+  color: #0284C7 !important;
+}
+
+html.light #database-status-badge:hover span.font-mono,
+.light #database-status-badge:hover span.font-mono,
+html.light #header-live-clock:hover span.font-sans,
+.light #header-live-clock:hover span.font-sans {
+  background-color: #E0F2FE !important;
+  border-color: #38BDF8 !important;
+  color: #0284C7 !important;
+}
+
+/* Enhanced contrast & surface luminance for metric cards */
+html.dark #metric-card-risk-score,
+.dark #metric-card-risk-score,
+div.dark #metric-card-risk-score {
+  background-color: #1A2436 !important;
+  border-color: #334155 !important;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.3);
+}
+
+html.dark div#root > div > div > main > div > div:nth-of-type(1) > div,
+.dark div#root > div > div > main > div > div:nth-of-type(1) > div,
+div.dark div#root > div > div > main > div > div:nth-of-type(1) > div {
+  background-color: #172133;
+  border-color: #2A384F;
+}
+
+/* LIGHT MODE: High-contrast, clean white surfaces with crisp text */
+html.light #metric-card-risk-score,
+.light #metric-card-risk-score,
+html.light div#root > div > div > main > div > div:nth-of-type(1) > div,
+.light div#root > div > div > main > div > div:nth-of-type(1) > div,
+html.light div#root > div > div > main > div:nth-of-type(1) > div:nth-of-type(1) > div,
+.light div#root > div > div > main > div:nth-of-type(1) > div:nth-of-type(1) > div {
+  background-color: #FFFFFF !important;
+  border-color: #CBD5E1 !important;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.06) !important;
+}
+
+html.light div#root > div > div > main > div > div:nth-of-type(1) > div span.font-mono,
+.light div#root > div > div > main > div > div:nth-of-type(1) > div span.font-mono,
+html.light div#root > div > div > main > div:nth-of-type(1) > div:nth-of-type(1) > div span.font-mono,
+.light div#root > div > div > main > div:nth-of-type(1) > div:nth-of-type(1) > div span.font-mono {
+  color: #334155 !important;
+}
+
+html.light div#root > div > div > main > div > div:nth-of-type(1) > div div.text-xl,
+.light div#root > div > div > main > div > div:nth-of-type(1) > div div.text-xl,
+html.light div#root > div > div > main > div:nth-of-type(1) > div:nth-of-type(1) > div div.text-xl,
+.light div#root > div > div > main > div:nth-of-type(1) > div:nth-of-type(1) > div div.text-xl {
+  color: #0F172A !important;
+}
+
+html.light div#root > div > div > main > div > div:nth-of-type(1) > div .text-\[\#64748B\],
+.light div#root > div > div > main > div > div:nth-of-type(1) > div .text-\[\#64748B\],
+html.light div#root > div > div > main > div > div:nth-of-type(1) > div .text-\[\#94A3B8\],
+.light div#root > div > div > main > div > div:nth-of-type(1) > div .text-\[\#94A3B8\] {
+  color: #475569 !important;
+}
+
+
+

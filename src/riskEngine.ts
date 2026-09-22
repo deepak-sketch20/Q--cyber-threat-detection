@@ -11,6 +11,8 @@
  * - Classical Channel Tampering
  */
 
+import { AdaptiveThresholdResult } from './types';
+
 export interface DetectedThreatDetail {
   threat: string;
   threat_category: string;
@@ -50,7 +52,8 @@ export function evaluateThreatRisk(
   cryptoVerifInfo?: { mathematical_verification: string },
   certInfo?: { status: string; trust_chain: string },
   sigInfo?: { signature_status?: string; hash_mismatch?: boolean },
-  quantumMetrics?: { qber?: number }
+  quantumMetrics?: { qber?: number },
+  adaptiveThresholdResult?: AdaptiveThresholdResult
 ): RiskEngineEvaluation {
   const detectedThreats: DetectedThreatDetail[] = [];
   const text = rawText || '';
@@ -68,6 +71,11 @@ export function evaluateThreatRisk(
     if (cryptoVerifInfo?.mathematical_verification === 'FAILED') evidence.push('Mathematical cryptographic signature verification failed');
     if (sigInfo?.hash_mismatch || /Hash Mismatch\s*[:=]\s*TRUE/i.test(text)) evidence.push('SHA-256 payload digest mismatch detected');
     if (/Signature Status\s*[:=]\s*INVALID/i.test(text)) evidence.push('Signature status explicitly flagged INVALID');
+    if (adaptiveThresholdResult?.statisticalAnomaly) {
+      evidence.push(
+        `Adaptive Statistical Threshold anomaly: measurement ${adaptiveThresholdResult.currentMeasurement.toFixed(2)}% deviates from calibrated range [${adaptiveThresholdResult.lowerThreshold.toFixed(2)}% — ${adaptiveThresholdResult.upperThreshold.toFixed(2)}%]`
+      );
+    }
 
     detectedThreats.push({
       threat: 'Digital Signature Forgery',
@@ -126,6 +134,11 @@ export function evaluateThreatRisk(
     if (/Impersonation Indicator\s*[:=]\s*DETECTED/i.test(text)) evidence.push('Signer impersonation indicator flagged');
     if (/Authentication\s*[:=]\s*FAILED/i.test(text)) evidence.push('Identity authentication verification failed');
     if (/Unknown User|Rogue Signer/i.test(text)) evidence.push('Signer identity not found in authorized directory');
+    if (adaptiveThresholdResult?.statisticalAnomaly) {
+      evidence.push(
+        `Adaptive Statistical Threshold anomaly: measurement ${adaptiveThresholdResult.currentMeasurement.toFixed(2)}% deviates from calibrated range [${adaptiveThresholdResult.lowerThreshold.toFixed(2)}% — ${adaptiveThresholdResult.upperThreshold.toFixed(2)}%]`
+      );
+    }
 
     detectedThreats.push({
       threat: 'Signer Impersonation',
@@ -166,13 +179,22 @@ export function evaluateThreatRisk(
     qberVal >= 0.11;
 
   if (isEavesdropping) {
+    const evidence = [
+      `QBER ${(qberVal * 100).toFixed(2)}% exceeds 11% threshold`,
+      'Entangle-and-measure interaction detected on simulated quantum carrier'
+    ];
+    if (adaptiveThresholdResult?.statisticalAnomaly) {
+      evidence.push(
+        `Adaptive Statistical Threshold anomaly: measurement ${adaptiveThresholdResult.currentMeasurement.toFixed(2)}% outside calibrated bounds [${adaptiveThresholdResult.lowerThreshold.toFixed(2)}% — ${adaptiveThresholdResult.upperThreshold.toFixed(2)}%]`
+      );
+    }
     detectedThreats.push({
       threat: 'Quantum Eavesdropping (Entangle-and-Measure)',
       threat_category: 'Quantum Channel Physical-Layer Attack',
       risk_score: 96,
       risk_level: 'CRITICAL',
       why_detected: `Simulated quantum bit error rate (QBER = ${(qberVal * 100).toFixed(2)}%) exceeds the 11.00% theoretical QDS security bound, indicating physical probe interaction.`,
-      evidence: [`QBER ${(qberVal * 100).toFixed(2)}% exceeds 11% threshold`, 'Entangle-and-measure interaction detected on simulated quantum carrier'],
+      evidence,
       first_action: 'Terminate/suspend the affected simulated quantum channel.',
       countermeasure: 'Abort key distillation; switch to alternate quantum entanglement path; initiate simulated privacy amplification and decoy-state protocol.'
     });
@@ -181,13 +203,19 @@ export function evaluateThreatRisk(
   // 6. INTERCEPT-RESEND ATTACK
   const isIntercept = /Intercept-Resend|Intercept and Resend/i.test(text);
   if (isIntercept) {
+    const evidence = ['Basis mismatch rate ~25% detected during quantum key reconciliation'];
+    if (adaptiveThresholdResult?.statisticalAnomaly) {
+      evidence.push(
+        `Adaptive Statistical Threshold anomaly: measurement ${adaptiveThresholdResult.currentMeasurement.toFixed(2)}% outside calibrated range [${adaptiveThresholdResult.lowerThreshold.toFixed(2)}% — ${adaptiveThresholdResult.upperThreshold.toFixed(2)}%]`
+      );
+    }
     detectedThreats.push({
       threat: 'Intercept-Resend Attack',
       threat_category: 'Quantum Basis Measurement Interception',
       risk_score: 91,
       risk_level: 'CRITICAL',
       why_detected: 'Non-orthogonal basis measurements by adversary induced systematic 25% conjugate basis error rate.',
-      evidence: ['Basis mismatch rate ~25% detected during quantum key reconciliation'],
+      evidence,
       first_action: 'Terminate the compromised quantum channel.',
       countermeasure: 'Deploy decoy-state protocol; detect non-orthogonal basis tampering; reroute entanglement distribution.'
     });
@@ -196,13 +224,19 @@ export function evaluateThreatRisk(
   // 7. QUANTUM CHANNEL MANIPULATION
   const isQManip = /Quantum Channel Manipulation|Quantum Channel\s*[:=]\s*MANIPULATED/i.test(text);
   if (isQManip) {
+    const evidence = ['Active phase and polarization distortion observed on quantum channel'];
+    if (adaptiveThresholdResult?.statisticalAnomaly) {
+      evidence.push(
+        `Adaptive Statistical Threshold: Statistical Anomaly Detected (${adaptiveThresholdResult.currentMeasurement.toFixed(2)}% outside calibrated range [${adaptiveThresholdResult.lowerThreshold.toFixed(2)}% — ${adaptiveThresholdResult.upperThreshold.toFixed(2)}%])`
+      );
+    }
     detectedThreats.push({
       threat: 'Quantum Channel Manipulation',
       threat_category: 'Physical Channel State Perturbation',
       risk_score: 80,
       risk_level: 'HIGH',
       why_detected: 'Simulated quantum channel telemetry shows state phase and polarization drift exceeding operational limits.',
-      evidence: ['Active phase and polarization distortion observed on quantum channel'],
+      evidence,
       first_action: 'Reject the modified message and re-establish a trusted channel.',
       countermeasure: 'Perform quantum state tomography; recalibrate phase/polarization baselines; re-entangle Bell pairs.'
     });

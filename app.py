@@ -29,6 +29,8 @@ import qds_simulator
 import risk_engine
 from forensic_report import generate_forensic_summary, save_forensic_report_files, REPORTS_DIR
 from email_alert import send_automatic_email_alert, get_email_config, log_security_event, SECURITY_EVENTS_LOG_FILE
+from supabase_db import supabase_db
+from evidence_engine import parse_text_lines, extract_threat_evidence_locations, build_evidence_timeline
 
 app = Flask(__name__, static_folder='static', template_folder='templates')
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16 MB max limit
@@ -341,6 +343,21 @@ def handle_upload():
             simulation_mode
         )
 
+        # Step 10.5: Attack Evidence Location & Line-Level Forensic Analysis
+        parsed_lines, is_bin = parse_text_lines(raw_text)
+        evidence_items = extract_threat_evidence_locations(
+            lines=parsed_lines,
+            filename=filename,
+            raw_text=raw_text,
+            crypto_verif=crypto_verif,
+            cert_info=cert_info,
+            stateful_replay=stateful_replay,
+            quantum_metrics=quantum_metrics,
+            is_binary=is_bin
+        )
+        threat_result['evidence_items'] = evidence_items
+        evidence_timeline = build_evidence_timeline(evidence_items, parsed_lines)
+
         # Step 11: Executive Forensic Summary Generation
         forensic_summary = generate_forensic_summary(
             case_id=case_id,
@@ -352,7 +369,8 @@ def handle_upload():
             quantum_metrics=quantum_metrics,
             stateful_replay_info=stateful_replay,
             crypto_verif_info=crypto_verif,
-            cert_info=cert_info
+            cert_info=cert_info,
+            evidence_items=evidence_items
         )
         report_files = save_forensic_report_files(forensic_summary)
 
@@ -426,6 +444,8 @@ def handle_upload():
             "post_quantum_assessment": pqc_posture,
             "cbom": cbom_data,
             "attack_table": attack_table,
+            "evidence": evidence_items,
+            "evidence_timeline": evidence_timeline,
             "logs": chained_audit_logs,
             "forensic_summary": forensic_summary,
             "email_alert": email_status,
@@ -457,6 +477,35 @@ def handle_upload():
             },
             "graphs": graphs_data
         }
+
+        # Step 13.5: Store file in Supabase Cloud Storage (Free Tier)
+        storage_path = None
+        try:
+            storage_path = supabase_db.upload_file(
+                file_bytes=file_bytes,
+                filename=filename,
+                case_id=case_id,
+                content_type=meta.get('mime_type', 'application/octet-stream')
+            )
+        except Exception as st_err:
+            storage_path = f"{supabase_db.bucket_name}/{case_id}/{filename}"
+
+        # Step 14: Save completed security analysis to Supabase PostgreSQL table 'security_analyses'
+        try:
+            saved_doc = supabase_db.save_analysis(case_id, response_data, storage_path=storage_path)
+            response_data["supabase_persistence"] = {
+                "saved": True,
+                "table": "security_analyses",
+                "case_id": case_id,
+                "storage_path": storage_path,
+                "bucket": supabase_db.bucket_name
+            }
+        except Exception as s_err:
+            # Handle Supabase connection gracefully without crashing the analysis
+            response_data["supabase_persistence"] = {
+                "saved": False,
+                "error": f"Supabase storage notice: {str(s_err)}"
+            }
 
         return jsonify(response_data)
 
@@ -537,14 +586,87 @@ def get_email_status():
         "is_test_mode": cfg["is_test_mode"]
     })
 
+@app.route('/api/database/status', methods=['GET'])
+def api_database_status():
+    """Returns Supabase Cloud Database & Storage telemetry and connection status."""
+    db_status = supabase_db.check_connection()
+    return jsonify({
+        "success": True,
+        "database": db_status
+    })
+
+@app.route('/api/cases', methods=['GET'])
+def api_get_cases():
+    """Retrieves previous security analyses from Supabase PostgreSQL table 'security_analyses'."""
+    try:
+        limit = int(request.args.get('limit', 50))
+        cases = supabase_db.retrieve_history(limit=limit)
+        return jsonify({
+            "success": True,
+            "count": len(cases),
+            "cases": cases
+        })
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": f"Failed to retrieve analyses from Supabase: {str(e)}",
+            "cases": []
+        }), 500
+
+@app.route('/api/cases/<case_id>', methods=['GET'])
+def api_get_case_detail(case_id):
+    """Retrieves details of a single analysis from Supabase."""
+    try:
+        case_data = supabase_db.get_analysis(case_id)
+        if not case_data:
+            return jsonify({
+                "success": False,
+                "error": f"Case '{case_id}' not found in Supabase table 'security_analyses'."
+            }), 404
+        return jsonify({
+            "success": True,
+            "case": case_data
+        })
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": f"Failed to retrieve case from Supabase: {str(e)}"
+        }), 500
+
+@app.route('/api/cases/<case_id>', methods=['DELETE'])
+def api_delete_case(case_id):
+    """Deletes an analysis record and stored artifact from Supabase."""
+    try:
+        success = supabase_db.delete_analysis(case_id)
+        return jsonify({
+            "success": success,
+            "message": f"Case '{case_id}' deleted from Supabase."
+        })
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": f"Failed to delete case from Supabase: {str(e)}"
+        }), 500
+
 @app.route('/api/health', methods=['GET'])
 def api_health():
-    """Health check endpoint."""
+    """Health check endpoint including Supabase telemetry."""
+    db_status = supabase_db.check_connection()
     return jsonify({
         "status": "ok",
         "service": "Quantum Digital Signature Security Analyzer",
         "timestamp": datetime.now(timezone.utc).isoformat(),
-        "quantum_engine": "Simulation-Based Statevector (Qiskit Equivalent)"
+        "quantum_engine": "Simulation-Based Statevector (Qiskit Equivalent)",
+        "database": {
+            "engine": "supabase_postgresql",
+            "storage": "supabase_storage",
+            "table": "security_analyses",
+            "bucket": db_status.get("bucket", "qsecure-files"),
+            "status": db_status["status"],
+            "connected": db_status["connected"],
+            "url": db_status.get("url"),
+            "message": db_status["message"]
+        }
     })
 
 # ==============================================================================

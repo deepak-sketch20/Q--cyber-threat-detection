@@ -2,10 +2,18 @@ import express from 'express';
 import path from 'path';
 import crypto from 'crypto';
 import fs from 'fs';
-import multer from 'multer';
 import { createServer as createViteServer } from 'vite';
 import { analyzeSecurityText, SAMPLE_DATASETS } from './src/analyzerEngine';
 import { executeEmailAlertProcess, getEmailConfig, generateReportFiles } from './src/emailService';
+import {
+  handleStreamingUpload,
+  handleChunkInit,
+  handleChunkUpload,
+  handleChunkComplete,
+  MAX_UPLOAD_SIZE,
+  UPLOAD_CHUNK_SIZE,
+  formatByteSize
+} from './src/streamingUploadService';
 import {
   simulateQubit,
   simulateBellState,
@@ -16,10 +24,24 @@ import {
   simulateCompleteQds,
   projectiveMeasurement
 } from './src/qdsSimulatorEngine';
-
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 16 * 1024 * 1024 } });
+import {
+  initializeDatabase,
+  getAllCases,
+  saveCase,
+  getCaseById,
+  deleteCase,
+  getDatabaseStatus,
+  setActiveEngine,
+  getActiveEngine,
+  testConnection,
+  generateAnalystToken,
+  verifyAnalystToken
+} from './src/dbService';
 
 async function startServer() {
+  // Initialize persistent storage safely (PostgreSQL or resilient local fallback)
+  await initializeDatabase();
+
   const app = express();
   const PORT = 3000;
 
@@ -45,57 +67,19 @@ async function startServer() {
     res.json({ success: true, filename: req.params.id, content: sample.content });
   });
 
-  // API 3: File Upload & Analysis
-  app.post('/api/upload', upload.single('file'), async (req, res) => {
-    try {
-      let rawText = '';
-      let filename = 'unknown.txt';
-      let fileBytesLength = 0;
-      let sha256Hash = '';
-      const mode = (req.body.attack_mode as string) || 'Automatic Detection';
-
-      if (req.file) {
-        filename = req.file.originalname || 'uploaded_file.txt';
-        fileBytesLength = req.file.buffer.length;
-        sha256Hash = crypto.createHash('sha256').update(req.file.buffer).digest('hex');
-        rawText = req.file.buffer.toString('utf-8');
-      } else if (req.body.sample_id && SAMPLE_DATASETS[req.body.sample_id]) {
-        filename = req.body.sample_id;
-        const content = SAMPLE_DATASETS[req.body.sample_id].content;
-        rawText = content;
-        fileBytesLength = Buffer.byteLength(content, 'utf-8');
-        sha256Hash = crypto.createHash('sha256').update(content).digest('hex');
-      } else if (req.body.text_content) {
-        filename = (req.body.filename as string) || 'raw_text_payload.txt';
-        rawText = req.body.text_content as string;
-        fileBytesLength = Buffer.byteLength(rawText, 'utf-8');
-        sha256Hash = crypto.createHash('sha256').update(rawText).digest('hex');
-      } else {
-        return res.status(400).json({ success: false, error: 'Please select a file first.' });
-      }
-
-      const refHash = (req.body.reference_hash as string) || undefined;
-      const analysis = analyzeSecurityText(rawText, filename, fileBytesLength, sha256Hash, mode, refHash);
-
-      // Execute Real Working Process for Email Alert if threat detected
-      if (analysis.forensic_summary) {
-        const emailResult = await executeEmailAlertProcess(
-          analysis.forensic_summary,
-          req.body.recipient || undefined,
-          false
-        );
-        analysis.email_alert = emailResult;
-        if (analysis.summary) {
-          analysis.summary.email_dispatched = emailResult.triggered;
-          analysis.summary.email_recipient = emailResult.recipient;
-        }
-      }
-
-      res.json(analysis);
-    } catch (err: any) {
-      console.error('API /api/upload error:', err);
-      res.status(500).json({ success: false, error: err?.message || 'Analysis internal failure' });
-    }
+  // API 3: Streaming & Chunked File Upload (Supports up to 1 TB with incremental SHA-256)
+  app.post('/api/upload', handleStreamingUpload);
+  app.post('/api/upload/init', handleChunkInit);
+  app.post('/api/upload/chunk', handleChunkUpload);
+  app.post('/api/upload/complete', handleChunkComplete);
+  app.get('/api/upload/config', (req, res) => {
+    res.json({
+      success: true,
+      max_upload_size: MAX_UPLOAD_SIZE,
+      chunk_size: UPLOAD_CHUNK_SIZE,
+      max_upload_size_formatted: formatByteSize(MAX_UPLOAD_SIZE),
+      chunk_size_formatted: formatByteSize(UPLOAD_CHUNK_SIZE)
+    });
   });
 
   // API 4: Dispatch Email Alert Working Process (Live on-demand execution)
@@ -206,14 +190,162 @@ async function startServer() {
     }
   });
 
-  // API 8: System Health Endpoint
+  // API 8: System Health Endpoint (with Database Telemetry)
   app.get('/api/health', (req, res) => {
+    const dbStatus = getDatabaseStatus();
     res.json({
       status: 'ok',
       service: 'Quantum Digital Signature Security Analyzer',
       timestamp: new Date().toISOString(),
-      quantum_engine: 'Simulation-Based Statevector (Qiskit Equivalent)'
+      quantum_engine: 'Simulation-Based Statevector (Qiskit Equivalent)',
+      database: dbStatus
     });
+  });
+
+  // API 8e: Get Database Configuration & Provider Options
+  app.get('/api/database/config', (req, res) => {
+    try {
+      const dbStatus = getDatabaseStatus();
+      res.json({ success: true, database: dbStatus });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err?.message || 'Failed to fetch database configuration' });
+    }
+  });
+
+  // API 8f: Switch Active Database Engine
+  app.post('/api/database/switch', async (req, res) => {
+    try {
+      const { engine } = req.body || {};
+      if (!engine || !['supabase_postgresql', 'postgresql', 'file_storage', 'auto'].includes(engine)) {
+        return res.status(400).json({ success: false, error: 'Invalid database engine. Choose: supabase_postgresql, postgresql, or file_storage.' });
+      }
+      const updatedStatus = setActiveEngine(engine);
+      res.json({ success: true, message: `Active database engine switched to: ${engine}`, database: updatedStatus });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err?.message || 'Failed to switch active database' });
+    }
+  });
+
+  // API 8g: Live Database Connection Test
+  app.post('/api/database/test', async (req, res) => {
+    try {
+      const { engine } = req.body || {};
+      const testResult = await testConnection(engine);
+      res.json(testResult);
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err?.message || 'Database test failed' });
+    }
+  });
+
+  // ============================================================================
+  // PERSISTENT STORAGE & CASE MANAGEMENT APIS (/api/cases)
+  // ============================================================================
+
+  // API 8b: Get all saved cases
+  app.get('/api/cases', async (req, res) => {
+    try {
+      const cases = await getAllCases();
+      res.json({ success: true, count: cases.length, cases });
+    } catch (err: any) {
+      console.error('API /api/cases GET error:', err);
+      res.status(500).json({ success: false, error: err?.message || 'Failed to retrieve cases' });
+    }
+  });
+
+  // API 8c: Save / Update a case manually
+  app.post('/api/cases', async (req, res) => {
+    try {
+      if (!req.body || (!req.body.file_name && !req.body.case_id)) {
+        return res.status(400).json({ success: false, error: 'Valid case information required.' });
+      }
+      const saved = await saveCase(req.body);
+      res.json({ success: true, case: saved });
+    } catch (err: any) {
+      console.error('API /api/cases POST error:', err);
+      res.status(500).json({ success: false, error: err?.message || 'Failed to save case' });
+    }
+  });
+
+  // API 8d: Get single case by Case ID
+  app.get('/api/cases/:caseId', async (req, res) => {
+    try {
+      const c = await getCaseById(req.params.caseId);
+      if (!c) {
+        return res.status(404).json({ success: false, error: 'Case record not found' });
+      }
+      res.json({ success: true, case: c });
+    } catch (err: any) {
+      console.error('API /api/cases/:caseId error:', err);
+      res.status(500).json({ success: false, error: err?.message || 'Failed to retrieve case' });
+    }
+  });
+
+  // API 8e: Delete a case
+  app.delete('/api/cases/:caseId', async (req, res) => {
+    try {
+      const success = await deleteCase(req.params.caseId);
+      res.json({ success });
+    } catch (err: any) {
+      console.error('API /api/cases/:caseId DELETE error:', err);
+      res.status(500).json({ success: false, error: err?.message || 'Failed to delete case' });
+    }
+  });
+
+  // ============================================================================
+  // FORENSIC AUDIT AUTHENTICATION APIS (/api/auth)
+  // ============================================================================
+
+  // API 8f: Get Current Authenticated Analyst Profile
+  app.get('/api/auth/me', (req, res) => {
+    const authHeader = req.headers.authorization;
+    let decoded = null;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.substring(7);
+      decoded = verifyAnalystToken(token);
+    }
+
+    res.json({
+      success: true,
+      authenticated: true,
+      user: {
+        id: decoded?.id || 'usr-01',
+        username: decoded?.username || 'alice',
+        email: 'alice@quantum-vault.internal',
+        name: 'Dr. Alice Vance',
+        role: decoded?.role || 'Lead Cryptographic Analyst',
+        institution: 'University Cybersecurity Research Laboratory'
+      }
+    });
+  });
+
+  // API 8g: Analyst Login
+  app.post('/api/auth/login', (req, res) => {
+    try {
+      const { email, username } = req.body || {};
+      const user = {
+        id: 'usr-01',
+        username: username || 'alice',
+        role: 'Lead Cryptographic Analyst'
+      };
+      const token = generateAnalystToken(user);
+      res.json({
+        success: true,
+        token,
+        user: {
+          ...user,
+          email: email || 'alice@quantum-vault.internal',
+          name: 'Dr. Alice Vance',
+          institution: 'University Cybersecurity Research Laboratory'
+        }
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err?.message || 'Authentication failed' });
+    }
+  });
+
+  // API 8h: Analyst Logout
+  app.post('/api/auth/logout', (req, res) => {
+    res.json({ success: true, message: 'Logged out successfully' });
   });
 
   // ============================================================================
@@ -258,56 +390,70 @@ async function startServer() {
     }
   });
 
-  // API 12: Quantum Teleportation
-  app.post('/api/qds/teleportation', (req, res) => {
+  // API 12: Quantum Teleportation (Supports both GET and POST)
+  const handleTeleportation = (req: any, res: any) => {
     try {
-      const { message_state, custom_theta, shots } = req.body || {};
+      const params = req.method === 'GET' ? req.query : req.body || {};
+      const { message_state, custom_theta, shots } = params;
       const result = simulateTeleportation(
         message_state || 'superposition',
         custom_theta !== undefined ? parseFloat(custom_theta) : undefined,
-        shots || 1024
+        shots ? parseInt(shots, 10) : 1024
       );
       res.json({ success: true, data: result });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err?.message || 'Teleportation simulation error' });
     }
-  });
+  };
+  app.get('/api/qds/teleportation', handleTeleportation);
+  app.post('/api/qds/teleportation', handleTeleportation);
 
-  // API 13: Pauli Correction Lookup
-  app.post('/api/qds/pauli', (req, res) => {
+  // API 13: Pauli Correction Lookup (Supports both GET and POST)
+  const handlePauli = (req: any, res: any) => {
     try {
-      const { bits } = req.body || {};
-      const result = applyPauliCorrection(bits || '00');
+      const params = req.method === 'GET' ? req.query : req.body || {};
+      const bits = params.bits || params.correction || '00';
+      const result = applyPauliCorrection(bits);
       res.json({ success: true, data: result });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err?.message || 'Pauli correction error' });
     }
-  });
+  };
+  app.get('/api/qds/pauli', handlePauli);
+  app.post('/api/qds/pauli', handlePauli);
 
-  // API 14: Quantum Channel Security & Attacks
-  app.post('/api/qds/channel', (req, res) => {
+  // API 14: Quantum Channel Security & Attacks (Supports both GET and POST)
+  const handleChannel = (req: any, res: any) => {
     try {
-      const { mode, total_bits, disturbance_level } = req.body || {};
+      const params = req.method === 'GET' ? req.query : req.body || {};
+      const mode = params.mode || (params.channel_noise ? 'EAVESDROPPING' : 'NORMAL');
+      const totalBits = params.total_bits ? parseInt(params.total_bits, 10) : 1000;
+      const disturbance = params.disturbance_level || params.channel_noise;
       const result = simulateQuantumChannel(
-        mode || 'NORMAL',
-        total_bits || 1000,
-        disturbance_level !== undefined ? parseFloat(disturbance_level) : undefined
+        mode,
+        totalBits,
+        disturbance !== undefined ? parseFloat(disturbance) : undefined
       );
       res.json({ success: true, data: result });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err?.message || 'Channel simulation error' });
     }
-  });
+  };
+  app.get('/api/qds/channel', handleChannel);
+  app.post('/api/qds/channel', handleChannel);
 
-  // API 15: Complete End-to-End QDS Simulation
-  app.post('/api/qds/simulate', (req, res) => {
+  // API 15: Complete End-to-End QDS Simulation (Supports both GET and POST)
+  const handleSimulate = (req: any, res: any) => {
     try {
-      const result = simulateCompleteQds(req.body || {});
+      const params = req.method === 'GET' ? req.query : req.body || {};
+      const result = simulateCompleteQds(params);
       res.json({ success: true, data: result });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err?.message || 'Complete QDS simulation error' });
     }
-  });
+  };
+  app.get('/api/qds/simulate', handleSimulate);
+  app.post('/api/qds/simulate', handleSimulate);
 
   // Serve static assets from public & static folders
   app.use('/static', express.static(path.join(process.cwd(), 'static')));

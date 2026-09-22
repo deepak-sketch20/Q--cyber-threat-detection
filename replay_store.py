@@ -10,8 +10,14 @@ import time
 from datetime import datetime, timezone
 from typing import Dict, Any, Optional, Tuple
 
+try:
+    from supabase_db import supabase_db
+except ImportError:
+    supabase_db = None
+
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'replay_store.db')
 DEFAULT_FRESHNESS_WINDOW_SECONDS = 120  # Configurable freshness constant (+/- 120 seconds)
+REPLAY_TABLE = "seen_replay_records"
 
 def _get_db_connection():
     """Initializes and returns SQLite connection with schema."""
@@ -63,50 +69,97 @@ def check_and_record_stateful_replay(
     max_hits = 0
     first_seen_str = None
     
-    conn = _get_db_connection()
-    try:
-        # Check identifiers
-        identifiers_to_check = []
-        if nonce and nonce.upper() not in ["REUSED", "UNKNOWN", "NONE", "N/A", ""]:
-            identifiers_to_check.append(("NONCE", f"NONCE:{nonce.strip()}"))
-        if txn_id and txn_id.upper() not in ["TXN-REPLAY-001", "TXN-REPLAY", "UNKNOWN", "NONE", ""]:
-            identifiers_to_check.append(("TXN_ID", f"TXN:{txn_id.strip()}"))
-        if session_id and session_id.upper() not in ["REUSED", "UNKNOWN", "NONE", ""]:
-            identifiers_to_check.append(("SESSION_ID", f"SESS:{session_id.strip()}"))
-        if message_hash:
-            identifiers_to_check.append(("MESSAGE_HASH", f"HASH:{message_hash.strip()}"))
+    store_engine = "SQLite Local Replay Cache"
+    sb_client = None
+    if supabase_db:
+        try:
+            sb_client = supabase_db.get_client()
+        except Exception:
+            sb_client = None
 
-        for id_type, id_val in identifiers_to_check:
-            cur = conn.cursor()
-            cur.execute("SELECT first_seen, last_seen, hit_count FROM seen_records WHERE record_value = ?", (id_val,))
-            row = cur.fetchone()
-            if row:
-                f_seen, l_seen, count = row
-                matched_items.append({
-                    "type": id_type,
-                    "value": id_val.split(":", 1)[1],
-                    "first_seen": datetime.fromtimestamp(f_seen, timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),
-                    "hit_count": count + 1
-                })
-                max_hits = max(max_hits, count + 1)
-                if not first_seen_str:
-                    first_seen_str = datetime.fromtimestamp(f_seen, timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-                # Update hit count
-                conn.execute(
-                    "UPDATE seen_records SET last_seen = ?, hit_count = hit_count + 1 WHERE record_value = ?",
-                    (now_ts, id_val)
-                )
-            else:
-                # Insert new record
-                conn.execute(
-                    "INSERT INTO seen_records (record_type, record_value, signer_id, message_hash, file_name, first_seen, last_seen, hit_count) VALUES (?, ?, ?, ?, ?, ?, ?, 1)",
-                    (id_type, id_val, signer_id or "unknown", message_hash, filename, now_ts, now_ts)
-                )
-        conn.commit()
-    except Exception as e:
-        print(f"Replay store DB error: {e}")
-    finally:
-        conn.close()
+    identifiers_to_check = []
+    if nonce and nonce.upper() not in ["REUSED", "UNKNOWN", "NONE", "N/A", ""]:
+        identifiers_to_check.append(("NONCE", f"NONCE:{nonce.strip()}"))
+    if txn_id and txn_id.upper() not in ["TXN-REPLAY-001", "TXN-REPLAY", "UNKNOWN", "NONE", ""]:
+        identifiers_to_check.append(("TXN_ID", f"TXN:{txn_id.strip()}"))
+    if session_id and session_id.upper() not in ["REUSED", "UNKNOWN", "NONE", ""]:
+        identifiers_to_check.append(("SESSION_ID", f"SESS:{session_id.strip()}"))
+    if message_hash:
+        identifiers_to_check.append(("MESSAGE_HASH", f"HASH:{message_hash.strip()}"))
+
+    # Attempt Supabase cloud persistence first if configured
+    if sb_client:
+        try:
+            store_engine = "Supabase PostgreSQL (Cloud Persistence)"
+            for id_type, id_val in identifiers_to_check:
+                resp = sb_client.table(REPLAY_TABLE).select("*").eq("record_value", id_val).limit(1).execute()
+                existing = resp.data[0] if resp.data and len(resp.data) > 0 else None
+                if existing:
+                    count = (existing.get("hit_count") or 1) + 1
+                    f_seen = existing.get("first_seen_str") or (
+                        datetime.fromtimestamp(existing["first_seen"], timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+                        if existing.get("first_seen") else now_str
+                    )
+                    matched_items.append({
+                        "type": id_type,
+                        "value": id_val.split(":", 1)[1],
+                        "first_seen": f_seen,
+                        "hit_count": count
+                    })
+                    max_hits = max(max_hits, count)
+                    if not first_seen_str:
+                        first_seen_str = f_seen
+                    sb_client.table(REPLAY_TABLE).update({
+                        "last_seen": now_ts,
+                        "hit_count": count
+                    }).eq("record_value", id_val).execute()
+                else:
+                    sb_client.table(REPLAY_TABLE).insert({
+                        "record_type": id_type,
+                        "record_value": id_val,
+                        "signer_id": signer_id or "unknown",
+                        "message_hash": message_hash,
+                        "file_name": filename,
+                        "first_seen": now_ts,
+                        "last_seen": now_ts,
+                        "hit_count": 1
+                    }).execute()
+        except Exception as sb_err:
+            sb_client = None
+
+    # Fallback to local SQLite if Supabase is unavailable
+    if not sb_client:
+        conn = _get_db_connection()
+        try:
+            for id_type, id_val in identifiers_to_check:
+                cur = conn.cursor()
+                cur.execute("SELECT first_seen, last_seen, hit_count FROM seen_records WHERE record_value = ?", (id_val,))
+                row = cur.fetchone()
+                if row:
+                    f_seen, l_seen, count = row
+                    matched_items.append({
+                        "type": id_type,
+                        "value": id_val.split(":", 1)[1],
+                        "first_seen": datetime.fromtimestamp(f_seen, timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),
+                        "hit_count": count + 1
+                    })
+                    max_hits = max(max_hits, count + 1)
+                    if not first_seen_str:
+                        first_seen_str = datetime.fromtimestamp(f_seen, timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+                    conn.execute(
+                        "UPDATE seen_records SET last_seen = ?, hit_count = hit_count + 1 WHERE record_value = ?",
+                        (now_ts, id_val)
+                    )
+                else:
+                    conn.execute(
+                        "INSERT INTO seen_records (record_type, record_value, signer_id, message_hash, file_name, first_seen, last_seen, hit_count) VALUES (?, ?, ?, ?, ?, ?, ?, 1)",
+                        (id_type, id_val, signer_id or "unknown", message_hash, filename, now_ts, now_ts)
+                    )
+            conn.commit()
+        except Exception as e:
+            print(f"Replay store DB error: {e}")
+        finally:
+            conn.close()
 
     # Timestamp freshness analysis
     timestamp_freshness = "UNKNOWN"
@@ -144,7 +197,7 @@ def check_and_record_stateful_replay(
         "freshness_window_seconds": freshness_window,
         "timestamp_freshness": timestamp_freshness,
         "freshness_delta_seconds": freshness_delta,
-        "store_type": "SQLite Local Replay Cache"
+        "store_type": store_engine
     }
 
 def clear_replay_store():

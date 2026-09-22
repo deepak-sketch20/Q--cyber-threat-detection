@@ -85,6 +85,64 @@ export interface DigitalSignatureInfo {
   note: string;
 }
 
+export type LocationType = 'LINE' | 'MULTI_LINE' | 'FIELD' | 'FILE_LEVEL' | 'BYTE_OFFSET' | 'EVENT';
+
+export interface EvidenceContextLine {
+  lineNumber: number;
+  content: string;
+}
+
+export interface RelatedEvidenceItem {
+  lineNumber?: number | null;
+  lineNumbers?: number[];
+  field?: string | null;
+  lineContent?: string | null;
+  reason?: string;
+  locationType?: LocationType;
+}
+
+export interface EvidenceLocation {
+  locationType: LocationType;
+  fileName: string;
+  lineNumber: number | null;
+  lineNumbers?: number[];
+  columnStart?: number | null;
+  columnEnd?: number | null;
+  startOffset?: number | null;
+  endOffset?: number | null;
+  byteOffsetStart?: number | null;
+  byteOffsetEnd?: number | null;
+  field?: string | null;
+  lineContent?: string | null;
+}
+
+export interface EvidenceItem {
+  id: string; // e.g. "EV-001"
+  threatType: string;
+  severity: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | string;
+  locationType: LocationType;
+  fileName: string;
+  lineNumber: number | null;
+  lineNumbers?: number[];
+  columnStart?: number | null;
+  columnEnd?: number | null;
+  startOffset?: number | null;
+  endOffset?: number | null;
+  byteOffsetStart?: number | null;
+  byteOffsetEnd?: number | null;
+  field?: string | null;
+  lineContent?: string | null;
+  contextBefore?: EvidenceContextLine[];
+  contextAfter?: EvidenceContextLine[];
+  reason: string;
+  detector: string;
+  relatedEvidence?: RelatedEvidenceItem[];
+  explanation?: string[];
+  timestamp?: string | null;
+  isContributingEvidence?: boolean;
+  statisticalSource?: boolean;
+}
+
 export interface ThreatResult {
   status: string;
   detected_threat: string;
@@ -94,6 +152,7 @@ export interface ThreatResult {
   confidence: number;
   reason: string;
   evidence: string[];
+  evidence_items?: EvidenceItem[];
   first_action: string;
   recommendation: string;
   intensity: number;
@@ -234,6 +293,43 @@ export interface EmailAlertStatus {
   logs?: string[];
 }
 
+export interface AdaptiveThresholdResult {
+  sampleCount: number;
+  mean: number;
+  standardDeviation: number;
+  minimum: number;
+  maximum: number;
+  lowerThreshold: number;
+  upperThreshold: number;
+  currentMeasurement: number;
+  isWithinRange: boolean;
+  statisticalAnomaly: boolean;
+  status:
+    | 'Within Normal Range'
+    | 'Statistical Anomaly Detected'
+    | 'Insufficient Genuine Samples for Statistical Calibration';
+  insufficientData: boolean;
+  standardDeviationType: 'population';
+  domainClamped: boolean;
+  unit: string;
+  expectedRangeDisplay: string;
+  explanationSteps: string[];
+  sourceLine?: number | null;
+  sourceContent?: string | null;
+  sourceType?: 'LINE' | 'TELEMETRY' | 'SIMULATION' | string;
+}
+
+export interface EvidenceTimelineItem {
+  id?: string;
+  time?: string | null;
+  lineNumber?: number | null;
+  event: string;
+  severity: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | 'INFO' | string;
+  evidenceId?: string;
+  hasTimestamp: boolean;
+  rawRecord?: string;
+}
+
 export interface AnalysisResponse {
   success: boolean;
   case_id?: string;
@@ -251,9 +347,12 @@ export interface AnalysisResponse {
   signature: DigitalSignatureInfo;
   threat: ThreatResult;
   quantum: QuantumMetrics;
+  adaptive_threshold?: AdaptiveThresholdResult;
   post_quantum_assessment?: PostQuantumAssessment;
   cbom?: CBOMData;
   attack_table: AttackTableRow[];
+  evidence?: EvidenceItem[];
+  evidence_timeline?: EvidenceTimelineItem[];
   logs: SecurityLog[];
   forensic_summary?: ForensicSummary;
   email_alert?: EmailAlertStatus;
@@ -283,10 +382,32 @@ export interface AnalysisResponse {
     email_dispatched?: boolean;
     email_recipient?: string;
   };
+  storage_path?: string;
+  supabase_persistence?: {
+    table: string;
+    bucket: string;
+    storage_path?: string;
+  };
   graphs: {
     labels: string[];
     values: number[];
     quantum_labels: string[];
     quantum_values: number[];
   };
+}
+
+export interface UploadProgressState {
+  isUploading: boolean;
+  uploadPercent: number; // 0 to 100
+  uploadedBytes: number;
+  totalBytes: number;
+  uploadStatus: 'idle' | 'uploading' | 'completed' | 'error';
+  sha256Status: 'idle' | 'calculating' | 'completed' | 'error';
+  analysisStatus: 'idle' | 'waiting' | 'running' | 'completed' | 'error';
+  fileName: string;
+  fileSizeFormatted: string;
+  calculatedHash?: string;
+  finalVerdict?: string;
+  riskScore?: number;
+  error?: string;
 }

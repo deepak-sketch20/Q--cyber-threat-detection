@@ -23,7 +23,8 @@ def generate_forensic_summary(
     quantum_metrics: Dict[str, Any],
     stateful_replay_info: Optional[Dict[str, Any]] = None,
     crypto_verif_info: Optional[Dict[str, Any]] = None,
-    cert_info: Optional[Dict[str, Any]] = None
+    cert_info: Optional[Dict[str, Any]] = None,
+    evidence_items: Optional[List[Dict[str, Any]]] = None
 ) -> Dict[str, Any]:
     """
     Constructs the official Executive Forensic Summary dictionary according to specifications.
@@ -163,7 +164,8 @@ def generate_forensic_summary(
             f"Risk Level: {risk_level}",
             f"Simulated QBER: {qber_val * 100:.2f}% (Threshold: 5.0%)",
             f"Simulated Mismatch: {mismatch_val * 100:.2f}%"
-        ]
+        ],
+        "evidence_locations": evidence_items or []
     }
 
     return summary_data
@@ -173,6 +175,26 @@ def format_forensic_summary_text(summary: Dict[str, Any]) -> str:
     indicators_formatted = "\n".join([f"  • {ind}" for ind in summary["threat_indicators"]])
     evidence_formatted = "\n".join([f"  • {ev}" for ev in summary["evidence"]])
     
+    # Format line-level evidence locations
+    ev_locs = summary.get("evidence_locations", [])
+    if ev_locs:
+        loc_lines = []
+        for ev in ev_locs:
+            loc_label = f"Lines {', '.join(str(n) for n in ev['lineNumbers'])}" if ev.get("lineNumbers") else \
+                        (f"Line {ev['lineNumber']}" if ev.get("lineNumber") else "File Level")
+            field_str = f" | Field: {ev['field']}" if ev.get("field") else ""
+            loc_lines.append(f"  • [{ev.get('severity', 'HIGH')}] {ev.get('threatType', 'Threat')} @ {loc_label}{field_str}")
+            if ev.get("lineContent"):
+                loc_lines.append(f"    Content: {ev['lineContent'][:90]}")
+            loc_lines.append(f"    Reason:  {ev.get('reason', '')}")
+            if ev.get("relatedEvidence"):
+                for rel in ev["relatedEvidence"]:
+                    rel_loc = f"Line {rel['lineNumber']}" if rel.get("lineNumber") else "File Level"
+                    loc_lines.append(f"    Related: {rel_loc} ({rel.get('field', 'record')}): {rel.get('reason', '')}")
+        evidence_locations_formatted = "\n".join(loc_lines)
+    else:
+        evidence_locations_formatted = "  • No anomaly locations detected. File payload verified authentic."
+
     text = f"""================================================================================
                       EXECUTIVE FORENSIC SUMMARY REPORT
                  Quantum-Inspired Cyber Threat Detection System
@@ -204,6 +226,9 @@ QUANTUM-INSPIRED TELEMETRY (SIMULATED):
 
 TRIGGERED THREAT INDICATORS:
 {indicators_formatted}
+
+EVIDENCE LOCATIONS & LINE-LEVEL FORENSIC ANALYSIS:
+{evidence_locations_formatted}
 
 FORENSIC FINDINGS:
   {summary['forensic_findings']}

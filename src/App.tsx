@@ -1,96 +1,239 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Shield,
-  ShieldAlert,
-  ShieldCheck,
-  FileText,
-  Upload,
-  Zap,
-  Activity,
-  CheckCircle,
-  AlertTriangle,
-  Lock,
-  Copy,
-  Check,
-  RefreshCw,
-  Terminal,
-  Printer,
-  Download,
-  Atom,
-  BarChart3,
   FileCode,
-  Info,
-  Server,
-  Layers,
-  Cpu,
-  Database,
-  KeyRound,
-  ExternalLink,
-  ChevronRight,
-  Filter,
-  Search,
+  Lock,
   Mail,
-  XCircle,
-  HelpCircle
+  RefreshCw,
+  Clock,
+  Terminal,
+  FileText,
+  Activity,
+  Layers,
+  Database,
+  Sun,
+  Moon
 } from 'lucide-react';
-import { AnalysisResponse, SecurityLog } from './types';
+import { AnalysisResponse, SecurityLog, UploadProgressState } from './types';
 import { SAMPLE_DATASETS, analyzeSecurityText, computeSha256 } from './analyzerEngine';
+import { DashboardView, HistoryCase } from './components/DashboardView';
+import { AnalyzerView } from './components/AnalyzerView';
+import { AttackSimulationView } from './components/AttackSimulationView';
+import { ReportView } from './components/ReportView';
+import { AuditLogsView } from './components/AuditLogsView';
+import { QuantumSecurityLab } from './components/QuantumSecurityLab';
 import { CbomModal } from './components/CbomModal';
 import { CertificateModal } from './components/CertificateModal';
 import { ExecutiveForensicAlert } from './components/ExecutiveForensicAlert';
-import { QuantumSecurityLab } from './components/QuantumSecurityLab';
+import { DatabaseModal } from './components/DatabaseModal';
+
+const MAX_UPLOAD_SIZE = 1024 * 1024 * 1024 * 1024; // 1 TB (1,099,511,627,776 bytes)
+
+function formatBytes(bytes: number): string {
+  if (!bytes || bytes === 0) return '0 bytes';
+  if (bytes < 1024) return `${bytes} bytes`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(2)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+  if (bytes < 1024 * 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+  return `${(bytes / (1024 * 1024 * 1024 * 1024)).toFixed(2)} TB`;
+}
 
 export default function App() {
   const [data, setData] = useState<AnalysisResponse | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
+  const [analysisState, setAnalysisState] = useState<'idle' | 'running' | 'completed' | 'error'>('idle');
+  const [currentStepIndex, setCurrentStepIndex] = useState<number>(0);
+  const [elapsedSeconds, setElapsedSeconds] = useState<number>(0);
+  const [currentOperation, setCurrentOperation] = useState<string>('Ready');
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [errorDetails, setErrorDetails] = useState<string | null>(null);
+
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<UploadProgressState | null>(null);
+  const activeXhrRef = useRef<XMLHttpRequest | null>(null);
   const [activeSampleId, setActiveSampleId] = useState<string>('test_1_secure.txt');
   const [referenceHashInput, setReferenceHashInput] = useState<string>('');
   const [mode, setMode] = useState<string>('Automatic Detection');
-  const [isDragging, setIsDragging] = useState<boolean>(false);
-  const [copiedHash, setCopiedHash] = useState<boolean>(false);
-  const [copiedLogHash, setCopiedLogHash] = useState<string | null>(null);
-  const [logFilter, setLogFilter] = useState<'ALL' | 'ALERT' | 'WARNING' | 'VALID'>('ALL');
-  const [logSearchQuery, setLogSearchQuery] = useState<string>('');
-  const [currentTime, setCurrentTime] = useState<string>('');
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'file-analysis' | 'quantum-lab' | 'threat-detection' | 'logs' | 'guide'>('dashboard');
+
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'analyzer' | 'attack-sim' | 'quantum-lab' | 'reports' | 'audit-logs'>('dashboard');
+  const [history, setHistory] = useState<HistoryCase[]>([]);
+  const [filesAnalyzedCount, setFilesAnalyzedCount] = useState<number>(0);
+  const [storageStatus, setStorageStatus] = useState<{ status: string; engine: string; message?: string }>({
+    status: 'active',
+    engine: 'Persistent Storage'
+  });
+
+  // Theme state: default to 'light' per user request, allow toggling
+  const [theme, setTheme] = useState<'dark' | 'light'>('light');
+
+  useEffect(() => {
+    if (theme === 'light') {
+      document.documentElement.classList.add('light');
+      document.body.classList.add('light');
+    } else {
+      document.documentElement.classList.remove('light');
+      document.body.classList.remove('light');
+    }
+    try {
+      localStorage.setItem('qsecure_theme', theme);
+    } catch {
+      // Ignore if localStorage unavailable
+    }
+  }, [theme]);
+
+  // Modals
   const [cbomOpen, setCbomOpen] = useState<boolean>(false);
   const [certModalOpen, setCertModalOpen] = useState<boolean>(false);
   const [emailAlertModalOpen, setEmailAlertModalOpen] = useState<boolean>(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const logEndRef = useRef<HTMLDivElement>(null);
+  const [dbModalOpen, setDbModalOpen] = useState<boolean>(false);
 
-  // Live time ticker
+  const [timeFormat, setTimeFormat] = useState<'local' | 'utc'>('local');
+  const [currentTime, setCurrentTime] = useState<string>('');
+  const [timezoneAbbr, setTimezoneAbbr] = useState<string>('');
+
+  // Live real-time clock showing accurate local system time with UTC toggle
   useEffect(() => {
     const updateTime = () => {
       const now = new Date();
-      setCurrentTime(now.toISOString().replace('T', ' ').substring(0, 19) + ' UTC');
+      if (timeFormat === 'utc') {
+        const utcStr = now.toISOString().replace('T', ' ').substring(0, 19);
+        setCurrentTime(utcStr);
+        setTimezoneAbbr('UTC');
+      } else {
+        const pad = (n: number) => String(n).padStart(2, '0');
+        const year = now.getFullYear();
+        const month = pad(now.getMonth() + 1);
+        const day = pad(now.getDate());
+        const hours = pad(now.getHours());
+        const minutes = pad(now.getMinutes());
+        const seconds = pad(now.getSeconds());
+        setCurrentTime(`${year}-${month}-${day} ${hours}:${minutes}:${seconds}`);
+
+        try {
+          const parts = new Intl.DateTimeFormat(undefined, { timeZoneName: 'short' }).formatToParts(now);
+          const tz = parts.find(p => p.type === 'timeZoneName')?.value;
+          setTimezoneAbbr(tz || 'Local');
+        } catch {
+          setTimezoneAbbr('Local');
+        }
+      }
     };
     updateTime();
     const interval = setInterval(updateTime, 1000);
     return () => clearInterval(interval);
-  }, []);
+  }, [timeFormat]);
 
-  // Initial load with Test 1 (Secure file)
+  // Fetch persistent cases & database telemetry from backend
+  const loadSavedCases = async () => {
+    try {
+      const res = await fetch('/api/cases');
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && Array.isArray(json.cases)) {
+          setHistory(json.cases);
+          setFilesAnalyzedCount(prev => Math.max(prev, json.cases.length));
+        }
+      }
+    } catch (err) {
+      console.warn('[Storage] Could not fetch saved cases from API:', err);
+    }
+  };
+
+  const checkHealthAndStorage = async () => {
+    try {
+      const res = await fetch('/api/health');
+      if (res.ok) {
+        const health = await res.json();
+        if (health.database) {
+          setStorageStatus({
+            status: health.database.status,
+            engine: health.database.engine === 'supabase_postgresql'
+              ? 'Supabase Cloud (PostgreSQL)'
+              : health.database.engine === 'postgresql'
+                ? 'PostgreSQL (Cloud)'
+                : health.database.status === 'active_local_fallback'
+                  ? 'Local File Storage (Fallback)'
+                  : 'Local File Storage',
+            message: health.database.message
+          });
+        }
+      }
+    } catch {
+      // Fallback silently to client state
+    }
+  };
+
+  // Initial load with baseline sample & persistent storage sync
   useEffect(() => {
     handleLoadSample('test_1_secure.txt');
+    loadSavedCases();
+    checkHealthAndStorage();
   }, []);
 
-  const handleLoadSample = async (sampleId: string, currentMode = mode, refHash = referenceHashInput) => {
+  // Centralized Analysis Execution Pipeline
+  const runAnalysisPipeline = async (
+    content: string | ArrayBuffer,
+    fileName: string,
+    fileSize: number,
+    currentMode: string,
+    refHash: string
+  ) => {
     setLoading(true);
-    setSelectedFile(null);
-    setActiveSampleId(sampleId);
+    setAnalysisState('running');
+    setErrorMessage(null);
+    setErrorDetails(null);
+    setCurrentOperation('File received');
+    setCurrentStepIndex(0);
+
+    const startTime = performance.now();
+    const timerInterval = setInterval(() => {
+      setElapsedSeconds((performance.now() - startTime) / 1000);
+    }, 50);
+
     try {
-      const sample = SAMPLE_DATASETS[sampleId];
-      if (!sample) return;
+      // Step 0: Ingestion
+      await new Promise(r => setTimeout(r, 60));
 
-      const hash = await computeSha256(sample.content);
-      const fileBytes = new TextEncoder().encode(sample.content).length;
+      // Step 1: Compute SHA-256 Digest
+      setCurrentOperation('Calculating SHA-256 Digest...');
+      setCurrentStepIndex(1);
+      const hash = await computeSha256(content);
+      await new Promise(r => setTimeout(r, 70));
 
-      // Try server API first, fallback to local engine
+      // Step 2: Signature verification
+      setCurrentOperation('Verifying Cryptographic Signature...');
+      setCurrentStepIndex(2);
+      await new Promise(r => setTimeout(r, 70));
+
+      // Step 3: Integrity analysis
+      setCurrentOperation('Evaluating Message Integrity & Tampering Indicators...');
+      setCurrentStepIndex(3);
+      await new Promise(r => setTimeout(r, 70));
+
+      // Step 4: Threat analysis
+      setCurrentOperation('Correlating Threat Vectors & Multi-Factor Risk...');
+      setCurrentStepIndex(4);
+      await new Promise(r => setTimeout(r, 80));
+
+      // Step 5: Quantum security simulation
+      setCurrentOperation('Simulating Quantum Channel & Bell-State QBER...');
+      setCurrentStepIndex(5);
+      await new Promise(r => setTimeout(r, 80));
+
+      // Step 6: Risk assessment
+      setCurrentOperation('Compiling Risk Assessment & Audit Ledger...');
+      setCurrentStepIndex(6);
+
+      const rawText = typeof content === 'string' ? content : new TextDecoder('utf-8').decode(content);
+
+      // Execute analysis (Server API with graceful local fallback)
+      let analysisResult: AnalysisResponse;
       try {
         const formData = new FormData();
-        formData.append('sample_id', sampleId);
+        const blob = typeof content === 'string'
+          ? new Blob([content], { type: 'text/plain' })
+          : new Blob([content]);
+        formData.append('file', blob, fileName);
         formData.append('attack_mode', currentMode);
         if (refHash) formData.append('reference_hash', refHash);
 
@@ -98,60 +241,374 @@ export default function App() {
           method: 'POST',
           body: formData
         });
+
         if (res.ok) {
-          const json = await res.json();
-          setData(json);
-          setLoading(false);
-          return;
+          analysisResult = await res.json();
+        } else {
+          analysisResult = analyzeSecurityText(rawText, fileName, fileSize, hash, currentMode, refHash);
         }
       } catch {
-        // Local fallback
+        analysisResult = analyzeSecurityText(rawText, fileName, fileSize, hash, currentMode, refHash);
       }
 
-      const result = analyzeSecurityText(sample.content, sampleId, fileBytes, hash, currentMode, refHash);
-      setData(result);
-    } catch (err) {
-      console.error('Failed to load sample:', err);
+      setCurrentStepIndex(7);
+      setCurrentOperation('Completed');
+      setAnalysisState('completed');
+      setData(analysisResult);
+
+      // Update session history
+      const riskScore = analysisResult.threat?.risk_score ?? 0;
+      const isThreat = analysisResult.threat?.status === 'ATTACK DETECTED' || riskScore >= 60;
+      const isSusp = !isThreat && (riskScore >= 35 || analysisResult.signature?.hash_mismatch);
+      const statusStr = isThreat ? 'COMPROMISED' : isSusp ? 'SUSPICIOUS' : 'SECURE';
+
+      setUploadProgress(prev => prev ? {
+        ...prev,
+        uploadPercent: 100,
+        uploadedBytes: fileSize,
+        totalBytes: fileSize,
+        uploadStatus: 'completed',
+        sha256Status: 'completed',
+        analysisStatus: 'completed',
+        calculatedHash: analysisResult.file?.sha256,
+        finalVerdict: statusStr,
+        riskScore
+      } : null);
+
+      const detectedCount = (analysisResult.attack_table || []).filter(
+        r => r.status === 'AUTO-DETECTED' || r.status === 'SIMULATION' || r.status === 'ATTACK DETECTED'
+      ).length;
+
+      const historyEntry: HistoryCase = {
+        case_id: analysisResult.case_id || `CASE-${Date.now().toString(36).toUpperCase()}`,
+        file_name: fileName,
+        timestamp: analysisResult.file?.upload_time || (() => {
+          const d = new Date();
+          const p = (n: number) => String(n).padStart(2, '0');
+          return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+        })(),
+        risk_score: riskScore,
+        status: statusStr,
+        threats_count: isThreat ? Math.max(1, detectedCount) : 0,
+        primary_threat: analysisResult.threat?.detected_threat || 'None',
+        data: analysisResult
+      };
+
+      setHistory(prev => [historyEntry, ...prev.filter(h => h.case_id !== historyEntry.case_id)].slice(0, 50));
+      setFilesAnalyzedCount(prev => prev + 1);
+
+      // Persist case record to backend database
+      try {
+        await fetch('/api/cases', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(historyEntry)
+        });
+      } catch (saveErr) {
+        console.warn('[Storage] Case persistence sync error:', saveErr);
+      }
+
+    } catch (err: any) {
+      console.error('Analysis pipeline error:', err);
+      setAnalysisState('error');
+      setErrorMessage('Unable to analyze the selected file.');
+      setErrorDetails(err?.message || 'Verification engine encountered an error while processing the artifact.');
+      setCurrentOperation('Failed');
     } finally {
+      clearInterval(timerInterval);
       setLoading(false);
     }
   };
 
+  const handleCancelUpload = () => {
+    if (activeXhrRef.current) {
+      activeXhrRef.current.abort();
+      activeXhrRef.current = null;
+    }
+    setLoading(false);
+    setAnalysisState('idle');
+    setUploadProgress(prev => prev ? {
+      ...prev,
+      isUploading: false,
+      uploadStatus: 'error',
+      analysisStatus: 'error',
+      error: 'Upload was cancelled by user.'
+    } : null);
+  };
+
+  const handleLoadSample = async (sampleId: string, currentMode = mode, refHash = referenceHashInput) => {
+    setSelectedFile(null);
+    setActiveSampleId(sampleId);
+    const sample = SAMPLE_DATASETS[sampleId];
+    if (!sample) return;
+
+    const fileBytes = new TextEncoder().encode(sample.content).length;
+    setUploadProgress({
+      isUploading: false,
+      uploadPercent: 100,
+      uploadedBytes: fileBytes,
+      totalBytes: fileBytes,
+      uploadStatus: 'completed',
+      sha256Status: 'calculating',
+      analysisStatus: 'running',
+      fileName: sampleId,
+      fileSizeFormatted: formatBytes(fileBytes)
+    });
+
+    await runAnalysisPipeline(sample.content, sampleId, fileBytes, currentMode, refHash);
+  };
+
   const handleFileUpload = async (file: File, currentMode = mode, refHash = referenceHashInput) => {
-    setLoading(true);
     setSelectedFile(file);
     setActiveSampleId('');
+    setErrorMessage(null);
+    setErrorDetails(null);
+
+    // 1. Client-Side Validation: Reject files > 1 TB
+    if (file.size > MAX_UPLOAD_SIZE) {
+      const formattedSize = formatBytes(file.size);
+      const errMsg = 'File exceeds the maximum supported size of 1 TB.';
+      setUploadProgress({
+        isUploading: false,
+        uploadPercent: 0,
+        uploadedBytes: 0,
+        totalBytes: file.size,
+        uploadStatus: 'error',
+        sha256Status: 'error',
+        analysisStatus: 'error',
+        fileName: file.name,
+        fileSizeFormatted: formattedSize,
+        error: errMsg
+      });
+      setErrorMessage(errMsg);
+      setErrorDetails(`The selected file "${file.name}" is ${formattedSize}, which exceeds the system limit of 1 TB (1,099,511,627,776 bytes). Please select a file up to 1 TB.`);
+      setAnalysisState('error');
+      return;
+    }
+
+    // 2. Client-Side Validation: Reject dangerous executable binaries
+    const ext = file.name.split('.').pop()?.toLowerCase() || '';
+    const disallowedExtensions = ['exe', 'dll', 'so', 'dylib', 'sh', 'bat', 'cmd', 'msi', 'vbs', 'ps1', 'com', 'scr'];
+    if (disallowedExtensions.includes(ext)) {
+      const errMsg = 'File type not supported for digital signature analysis: Executable files cannot be uploaded.';
+      setUploadProgress({
+        isUploading: false,
+        uploadPercent: 0,
+        uploadedBytes: 0,
+        totalBytes: file.size,
+        uploadStatus: 'error',
+        sha256Status: 'error',
+        analysisStatus: 'error',
+        fileName: file.name,
+        fileSizeFormatted: formatBytes(file.size),
+        error: errMsg
+      });
+      setErrorMessage('File type not supported.');
+      setErrorDetails(`Files with extension .${ext} cannot be uploaded for cryptographic security verification.`);
+      setAnalysisState('error');
+      return;
+    }
+
+    // 3. Initialize Progress State (zero in-memory loading)
+    setLoading(true);
+    setAnalysisState('running');
+    setCurrentStepIndex(0);
+    setCurrentOperation('Uploading...');
+    setElapsedSeconds(0);
+
+    const startTime = performance.now();
+    const timerInterval = setInterval(() => {
+      setElapsedSeconds((performance.now() - startTime) / 1000);
+    }, 50);
+
+    setUploadProgress({
+      isUploading: true,
+      uploadPercent: 0,
+      uploadedBytes: 0,
+      totalBytes: file.size,
+      uploadStatus: 'uploading',
+      sha256Status: 'calculating',
+      analysisStatus: 'waiting',
+      fileName: file.name,
+      fileSizeFormatted: formatBytes(file.size)
+    });
+
+    // 4. Stream upload via browser XMLHttpRequest (does NOT buffer into JS RAM)
     try {
-      const fileBuffer = await file.arrayBuffer();
-      const text = new TextDecoder('utf-8').decode(fileBuffer);
-      const hash = await computeSha256(fileBuffer);
+      const formData = new FormData();
+      formData.append('file', file, file.name);
+      formData.append('attack_mode', currentMode);
+      if (refHash) formData.append('reference_hash', refHash);
 
-      try {
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('attack_mode', currentMode);
-        if (refHash) formData.append('reference_hash', refHash);
+      const xhr = new XMLHttpRequest();
+      activeXhrRef.current = xhr;
 
-        const res = await fetch('/api/upload', {
-          method: 'POST',
-          body: formData
-        });
-        if (res.ok) {
-          const json = await res.json();
-          setData(json);
-          setLoading(false);
-          return;
+      xhr.open('POST', '/api/upload');
+
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable && event.total > 0) {
+          const percent = Math.min(99, Math.round((event.loaded / event.total) * 100));
+          setUploadProgress(prev => prev ? {
+            ...prev,
+            uploadPercent: percent,
+            uploadedBytes: event.loaded,
+            totalBytes: event.total,
+            uploadStatus: 'uploading',
+            sha256Status: 'calculating',
+            analysisStatus: 'waiting'
+          } : null);
+          setCurrentOperation(`Uploading... ${percent}%`);
         }
-      } catch {
-        // Fallback
-      }
+      };
 
-      const result = analyzeSecurityText(text, file.name, file.size, hash, currentMode, refHash);
-      setData(result);
-    } catch (err) {
-      console.error('Failed to analyze uploaded file:', err);
-    } finally {
+      xhr.upload.onload = () => {
+        setUploadProgress(prev => prev ? {
+          ...prev,
+          uploadPercent: 100,
+          uploadedBytes: file.size,
+          uploadStatus: 'completed',
+          sha256Status: 'calculating',
+          analysisStatus: 'running'
+        } : null);
+        setCurrentOperation('Upload completed. Starting security analysis...');
+        setCurrentStepIndex(1);
+      };
+
+      xhr.onload = async () => {
+        clearInterval(timerInterval);
+        activeXhrRef.current = null;
+
+        if (xhr.status === 200) {
+          try {
+            const analysisResult: AnalysisResponse = JSON.parse(xhr.responseText);
+            const riskScore = analysisResult.threat?.risk_score ?? 0;
+            const isThreat = analysisResult.threat?.status === 'ATTACK DETECTED' || riskScore >= 60;
+            const isSusp = !isThreat && (riskScore >= 35 || analysisResult.signature?.hash_mismatch);
+            const statusStr = isThreat ? 'COMPROMISED' : isSusp ? 'SUSPICIOUS' : 'SECURE';
+
+            setUploadProgress(prev => prev ? {
+              ...prev,
+              uploadPercent: 100,
+              uploadedBytes: file.size,
+              uploadStatus: 'completed',
+              sha256Status: 'completed',
+              analysisStatus: 'completed',
+              calculatedHash: analysisResult.file?.sha256,
+              finalVerdict: statusStr,
+              riskScore
+            } : null);
+
+            setCurrentStepIndex(7);
+            setCurrentOperation('Completed');
+            setAnalysisState('completed');
+            setData(analysisResult);
+
+            const detectedCount = (analysisResult.attack_table || []).filter(
+              r => r.status === 'AUTO-DETECTED' || r.status === 'SIMULATION' || r.status === 'ATTACK DETECTED'
+            ).length;
+
+            const historyEntry: HistoryCase = {
+              case_id: analysisResult.case_id || `CASE-${Date.now().toString(36).toUpperCase()}`,
+              file_name: file.name,
+              file_size: file.size,
+              file_type: file.name.split('.').pop()?.toUpperCase() || 'BIN',
+              sha256: analysisResult.file?.sha256 || '',
+              user_id: 'usr-01',
+              analysis_status: 'COMPLETED',
+              security_status: statusStr,
+              timestamp: analysisResult.file?.upload_time || new Date().toISOString().substring(11, 19),
+              risk_score: riskScore,
+              status: statusStr,
+              threats_count: isThreat ? Math.max(1, detectedCount) : 0,
+              primary_threat: analysisResult.threat?.detected_threat || 'None',
+              data: analysisResult
+            };
+
+            setHistory(prev => [historyEntry, ...prev.filter(h => h.case_id !== historyEntry.case_id)].slice(0, 50));
+            setFilesAnalyzedCount(prev => prev + 1);
+
+            // Persist case record to backend database
+            try {
+              await fetch('/api/cases', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(historyEntry)
+              });
+            } catch (saveErr) {
+              console.warn('[Storage] Case persistence sync error:', saveErr);
+            }
+          } catch (jsonErr: any) {
+            setAnalysisState('error');
+            setErrorMessage('Invalid response from security engine.');
+            setErrorDetails(jsonErr?.message);
+          }
+        } else {
+          let errStr = `Upload failed with HTTP ${xhr.status}`;
+          try {
+            const resObj = JSON.parse(xhr.responseText);
+            if (resObj.error) errStr = resObj.error;
+          } catch {}
+
+          setUploadProgress(prev => prev ? {
+            ...prev,
+            uploadStatus: 'error',
+            analysisStatus: 'error',
+            error: errStr
+          } : null);
+
+          setAnalysisState('error');
+          setErrorMessage(errStr.includes('exceeds') ? 'File exceeds the maximum supported size of 1 TB.' : 'Analysis failure.');
+          setErrorDetails(errStr);
+        }
+        setLoading(false);
+      };
+
+      xhr.onerror = () => {
+        clearInterval(timerInterval);
+        activeXhrRef.current = null;
+        setLoading(false);
+        setAnalysisState('error');
+        const err = 'Network connection failure during file upload. Please check your connection and retry.';
+        setUploadProgress(prev => prev ? {
+          ...prev,
+          uploadStatus: 'error',
+          analysisStatus: 'error',
+          error: err
+        } : null);
+        setErrorMessage('Network connection failure.');
+        setErrorDetails(err);
+      };
+
+      xhr.ontimeout = () => {
+        clearInterval(timerInterval);
+        activeXhrRef.current = null;
+        setLoading(false);
+        setAnalysisState('error');
+        const err = 'Upload timed out. The file transfer took longer than allowed.';
+        setUploadProgress(prev => prev ? {
+          ...prev,
+          uploadStatus: 'error',
+          analysisStatus: 'error',
+          error: err
+        } : null);
+        setErrorMessage('Upload timed out.');
+        setErrorDetails(err);
+      };
+
+      xhr.onabort = () => {
+        clearInterval(timerInterval);
+        activeXhrRef.current = null;
+        setLoading(false);
+        setAnalysisState('idle');
+      };
+
+      xhr.send(formData);
+    } catch (err: any) {
+      clearInterval(timerInterval);
       setLoading(false);
+      setAnalysisState('error');
+      setErrorMessage('Could not initiate file upload.');
+      setErrorDetails(err?.message || 'Unknown error');
     }
   };
 
@@ -166,129 +623,182 @@ export default function App() {
     }
   };
 
-  const handleCopyHash = () => {
-    if (data?.file.sha256) {
-      navigator.clipboard.writeText(data.file.sha256);
-      setCopiedHash(true);
-      setTimeout(() => setCopiedHash(false), 2000);
+  const handleSelectCaseFromHistory = (caseData: AnalysisResponse) => {
+    setData(caseData);
+    setActiveTab('reports');
+  };
+
+  const handleRetry = () => {
+    if (selectedFile) {
+      handleFileUpload(selectedFile);
+    } else if (activeSampleId) {
+      handleLoadSample(activeSampleId);
     }
   };
 
-  const handleCopyLogHash = (hash: string) => {
-    navigator.clipboard.writeText(hash);
-    setCopiedLogHash(hash);
-    setTimeout(() => setCopiedLogHash(null), 2000);
-  };
-
-  const handleCopyAllLogs = () => {
-    if (!data?.logs) return;
-    const text = (data.logs || []).map(l => `[${l.time}] [${l.status}] ${l.event} | Hash: ${l.event_hash || ''}`).join('\n');
-    navigator.clipboard.writeText(text);
-    setCopiedLogHash('ALL_LOGS_COPIED');
-    setTimeout(() => setCopiedLogHash(null), 2000);
-  };
-
-  const handleExportJSON = () => {
-    if (!data) return;
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `qds_security_report_${data.case_id || Date.now()}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const handleExportLogs = () => {
-    if (!data?.logs) return;
-    const text = (data.logs || []).map(l => `[${l.time}] [${l.status}] ${l.event} | Hash: ${l.event_hash || ''}`).join('\n');
-    const blob = new Blob([text], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `qds_audit_trail_${Date.now()}.txt`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const filteredLogs = (data?.logs || []).filter(log => {
-    if (logFilter === 'ALERT' && log.status !== 'ALERT' && log.status !== 'ACTION_REQUIRED') return false;
-    if (logFilter === 'WARNING' && log.status !== 'WARNING') return false;
-    if (logFilter === 'VALID' && (log.status === 'ALERT' || log.status === 'ACTION_REQUIRED' || log.status === 'WARNING')) return false;
-    if (logSearchQuery.trim()) {
-      const q = logSearchQuery.toLowerCase();
-      return (
-        log.event.toLowerCase().includes(q) ||
-        (log.event_hash && log.event_hash.toLowerCase().includes(q)) ||
-        log.status.toLowerCase().includes(q)
-      );
-    }
-    return true;
-  });
-
-  const isAttack = data?.threat?.status === 'ATTACK DETECTED';
-  const riskScore = data?.threat?.risk_score ?? 0;
-  const riskLevel = data?.threat?.risk ?? 'LOW';
-
-  const getRiskScoreColor = (score: number) => {
-    if (score >= 80) return '#C62828';
-    if (score >= 50) return '#B26A00';
-    return '#2E7D32';
+  const handleReset = () => {
+    setSelectedFile(null);
+    setActiveSampleId('test_1_secure.txt');
+    setReferenceHashInput('');
+    setErrorMessage(null);
+    setErrorDetails(null);
+    handleLoadSample('test_1_secure.txt');
   };
 
   return (
-    <div className="min-h-screen bg-[#F5F6F8] text-[#202124] flex flex-col justify-between">
-      {/* 1. Header */}
+    <div className={`min-h-screen ${theme === 'light' ? 'bg-[#F8FAFC] text-[#0F172A]' : 'bg-[#0B0F19] text-[#F1F5F9]'} flex flex-col justify-between font-sans transition-colors duration-150`}>
       <div>
-        <header className="bg-white border-b border-[#DADCE0]">
-          <div className="max-w-[1200px] mx-auto px-4 py-3.5">
+        {/* ===================================================================== */}
+        {/* 1. APPLICATION SHELL: HEADER */}
+        {/* ===================================================================== */}
+        <header className={theme === 'light' ? 'bg-white border-b border-[#CBD5E1]' : 'bg-[#0E1526] border-b border-[#1E293B]'}>
+          <div className="max-w-[1240px] mx-auto px-4 py-3">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-              <div>
-                <h1 className="text-lg md:text-xl font-bold tracking-tight text-[#202124]">
-                  QUANTUM DIGITAL SIGNATURE SECURITY ANALYZER
-                </h1>
-                <p className="text-xs text-[#5F6368] mt-0.5">
-                  Simulation-Based Security Research Prototype &bull; Department of Computer Science &amp; Engineering
-                </p>
+              <div className="flex items-center gap-3">
+                <div className={`w-8 h-8 rounded flex items-center justify-center shrink-0 border ${
+                  theme === 'light' ? 'bg-[#E0F2FE] border-[#BAE6FD]' : 'bg-[#0284C7]/15 border-[#0284C7]/30'
+                }`}>
+                  <Shield className={`w-4 h-4 ${theme === 'light' ? 'text-[#0284C7]' : 'text-[#38BDF8]'}`} />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h1 className={`text-base sm:text-lg font-bold tracking-tight ${theme === 'light' ? 'text-[#0F172A]' : 'text-[#F1F5F9]'}`}>
+                      Q-Secure
+                    </h1>
+                    <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded font-semibold uppercase border ${
+                      theme === 'light' ? 'bg-[#E0F2FE] border-[#BAE6FD] text-[#0284C7]' : 'bg-[#0284C7]/20 border-[#0284C7]/40 text-[#38BDF8]'
+                    }`}>
+                      SOC Defense Platform
+                    </span>
+                  </div>
+                  <p className={`text-xs mt-0.5 ${theme === 'light' ? 'text-[#475569]' : 'text-[#94A3B8]'}`}>
+                    Quantum Digital Signature Security Analyzer &bull; University Cybersecurity Research Laboratory
+                  </p>
+                </div>
               </div>
 
-              <div className="flex items-center gap-3 flex-wrap">
-                <div className="flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded bg-[#F5F6F8] border border-[#DADCE0] text-[#202124]">
-                  <span className="w-2 h-2 rounded-full bg-[#2E7D32]"></span>
-                  <span>System Status: Online</span>
+              <div className="flex items-center gap-2 flex-wrap">
+                <div className={`flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded border ${
+                  theme === 'light'
+                    ? 'bg-[#ECFDF5] border-[#A7F3D0] text-[#059669]'
+                    : 'bg-[#064E3B]/30 border-[#065F46] text-[#34D399]'
+                }`}>
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#10B981] animate-pulse"></span>
+                  <span>System: Online</span>
                 </div>
-                <div className="text-xs font-mono text-[#5F6368] hidden sm:block">
-                  {currentTime}
+                <div
+                  id="database-status-badge"
+                  onClick={() => setDbModalOpen(true)}
+                  className={`flex items-center gap-2 text-xs font-semibold px-2.5 py-1.5 rounded border cursor-pointer transition-all duration-150 group ${
+                    theme === 'light'
+                      ? 'bg-white border-[#CBD5E1] text-[#0F172A] hover:bg-[#F8FAFC] hover:border-[#0284C7]'
+                      : 'bg-[#131B2E] border-[#1E293B] text-[#F1F5F9] hover:bg-[#1E293B] hover:border-[#0284C7] hover:text-[#38BDF8]'
+                  }`}
+                  title="Click to view and switch database provider"
+                >
+                  <span className={`w-1.5 h-1.5 rounded-full ${storageStatus.status === 'connected' ? 'bg-[#10B981]' : (theme === 'light' ? 'bg-[#0284C7]' : 'bg-[#38BDF8]')} shrink-0`}></span>
+                  <span className="flex items-center gap-1.5">
+                    <span className={`font-normal ${theme === 'light' ? 'text-[#64748B] group-hover:text-[#0284C7]' : 'text-[#94A3B8] group-hover:text-[#38BDF8]'}`}>Database:</span>
+                    <span className={`font-semibold ${theme === 'light' ? 'text-[#0F172A] group-hover:text-[#0284C7]' : 'text-[#F1F5F9] group-hover:text-[#38BDF8]'}`}>{storageStatus.engine}</span>
+                    <span className={`ml-1 text-[10px] font-mono uppercase px-1.5 py-0.5 rounded border transition-colors ${
+                      theme === 'light'
+                        ? 'bg-[#F1F5F9] text-[#0284C7] border-[#CBD5E1] font-bold group-hover:bg-[#E0F2FE] group-hover:border-[#38BDF8]'
+                        : 'bg-[#1E293B] text-[#94A3B8] border-[#334155] group-hover:bg-[#0284C7]/20 group-hover:text-[#38BDF8] group-hover:border-[#0284C7]/40'
+                    }`}>
+                      Switch
+                    </span>
+                  </span>
                 </div>
+                <div
+                  id="header-live-clock"
+                  onClick={() => setTimeFormat(prev => prev === 'local' ? 'utc' : 'local')}
+                  title={timeFormat === 'local' ? "Showing accurate Local System Time (Click to toggle UTC)" : "Showing UTC Time (Click to toggle Local)"}
+                  className={`hidden sm:flex items-center gap-2 text-xs font-mono font-medium px-2.5 py-1.5 rounded border cursor-pointer transition-all duration-150 select-none group ${
+                    theme === 'light'
+                      ? 'bg-white border-[#CBD5E1] text-[#0F172A] hover:bg-[#F8FAFC] hover:border-[#0284C7]'
+                      : 'bg-[#131B2E] border-[#1E293B] text-[#F1F5F9] hover:bg-[#1E293B] hover:border-[#0284C7] hover:text-[#38BDF8]'
+                  }`}
+                >
+                  <Clock className={`w-3.5 h-3.5 shrink-0 ${theme === 'light' ? 'text-[#0284C7]' : 'text-[#38BDF8]'}`} />
+                  <span className={`tabular-nums tracking-tight font-semibold ${theme === 'light' ? 'text-[#0F172A] group-hover:text-[#0284C7]' : 'text-[#F1F5F9] group-hover:text-[#38BDF8]'}`}>
+                    {currentTime}
+                  </span>
+                  <span className={`text-[10px] font-sans font-semibold uppercase px-1.5 py-0.5 rounded border transition-colors ${
+                    theme === 'light'
+                      ? 'bg-[#F1F5F9] text-[#0284C7] border-[#CBD5E1] font-bold group-hover:bg-[#E0F2FE] group-hover:border-[#38BDF8]'
+                      : 'bg-[#1E293B] text-[#94A3B8] border-[#334155] group-hover:bg-[#0284C7]/20 group-hover:text-[#38BDF8] group-hover:border-[#0284C7]/40'
+                  }`}>
+                    {timeFormat === 'local' ? (timezoneAbbr || 'Local') : 'UTC'}
+                  </span>
+                </div>
+
+                {/* Light Mode / Dark Mode Switch Button */}
+                <button
+                  id="theme-mode-toggle"
+                  onClick={() => setTheme(prev => prev === 'dark' ? 'light' : 'dark')}
+                  role="switch"
+                  aria-checked={theme === 'light'}
+                  aria-label={theme === 'dark' ? "Switch to Light Mode" : "Switch to Dark Mode"}
+                  title={theme === 'dark' ? "Switch to Light Mode" : "Switch to Dark Mode"}
+                  className={`flex items-center gap-2 text-xs font-medium px-2.5 py-1.5 rounded border cursor-pointer transition-all duration-150 select-none group ${
+                    theme === 'light'
+                      ? 'bg-white border-[#CBD5E1] text-[#0F172A] hover:bg-[#F8FAFC] hover:border-[#0284C7]'
+                      : 'bg-[#131B2E] border-[#1E293B] text-[#F1F5F9] hover:bg-[#1E293B] hover:border-[#0284C7] hover:text-[#38BDF8]'
+                  }`}
+                >
+                  {theme === 'light' ? (
+                    <>
+                      <Sun className="w-3.5 h-3.5 text-[#D97706] transition-transform" />
+                      <span className="font-semibold text-[#0F172A]">Light Mode</span>
+                      <span className="w-7 h-3.5 rounded-full bg-[#0284C7] p-0.5 flex items-center justify-end transition-colors">
+                        <span className="w-2.5 h-2.5 rounded-full bg-white shadow-xs transition-transform"></span>
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <Moon className="w-3.5 h-3.5 text-[#38BDF8] transition-transform" />
+                      <span className="font-semibold text-[#F1F5F9]">Dark Mode</span>
+                      <span className="w-7 h-3.5 rounded-full bg-[#1E293B] border border-[#334155] p-0.5 flex items-center transition-colors">
+                        <span className="w-2.5 h-2.5 rounded-full bg-[#94A3B8] group-hover:bg-[#38BDF8] transition-transform"></span>
+                      </span>
+                    </>
+                  )}
+                </button>
               </div>
             </div>
 
-            {/* Subtle technical metadata bar */}
-            <div className="mt-2.5 pt-2 border-t border-[#DADCE0] text-[11px] font-mono text-[#5F6368] flex flex-wrap items-center gap-x-3 gap-y-1">
+            {/* Technical Sub-Header Strip */}
+            <div className={`mt-2.5 pt-2 border-t text-[11px] font-mono flex flex-wrap items-center gap-x-3 gap-y-1 ${
+              theme === 'light' ? 'border-[#E2E8F0] text-[#475569]' : 'border-[#1E293B] text-[#64748B]'
+            }`}>
               <span>Prototype Version: 1.0</span>
               <span>&bull;</span>
               <span>Simulation Engine: Qiskit Aer</span>
               <span>&bull;</span>
               <span>Hash Algorithm: SHA-256</span>
               <span>&bull;</span>
-              <span>Analysis Mode: {mode}</span>
+              <span>Analysis Mode: <span className={theme === 'light' ? 'text-[#0F172A] font-semibold' : 'text-[#94A3B8]'}>{mode}</span></span>
               <span>&bull;</span>
               <span>Quantum Backend: Statevector Simulator</span>
             </div>
           </div>
         </header>
 
-        {/* 2. Navigation Bar */}
-        <nav className="bg-white border-b border-[#DADCE0] sticky top-0 z-40">
-          <div className="max-w-[1200px] mx-auto px-4 flex items-center justify-between overflow-x-auto">
-            <div className="flex items-center gap-1">
+        {/* ===================================================================== */}
+        {/* 2. TOP NAVIGATION: DASHBOARD | SECURITY ANALYZER | ATTACK SIMULATION | QUANTUM SECURITY | REPORTS | AUDIT LOGS */}
+        {/* ===================================================================== */}
+        <nav className={`border-b sticky top-0 z-40 ${
+          theme === 'light' ? 'bg-white border-[#CBD5E1]' : 'bg-[#0E1526] border-[#1E293B]'
+        }`}>
+          <div className="max-w-[1240px] mx-auto px-4 flex items-center justify-between overflow-x-auto">
+            <div className="flex items-center gap-0.5">
               {[
                 { id: 'dashboard', label: 'Dashboard' },
-                { id: 'file-analysis', label: 'File Analysis' },
+                { id: 'analyzer', label: 'Security Analyzer' },
+                { id: 'attack-sim', label: 'Attack Simulation' },
                 { id: 'quantum-lab', label: 'Quantum Security' },
-                { id: 'threat-detection', label: 'Threat Detection' },
-                { id: 'logs', label: 'Security Logs' },
-                { id: 'guide', label: 'Lab Guide' },
+                { id: 'reports', label: 'Reports' },
+                { id: 'audit-logs', label: 'Audit Logs' },
               ].map((tab) => {
                 const isActive = activeTab === tab.id;
                 return (
@@ -297,8 +807,12 @@ export default function App() {
                     onClick={() => setActiveTab(tab.id as any)}
                     className={`px-3.5 py-2.5 text-xs font-medium border-b-2 transition cursor-pointer -mb-[1px] whitespace-nowrap ${
                       isActive
-                        ? 'border-[#2457A6] text-[#2457A6] font-bold bg-[#F5F6F8]'
-                        : 'border-transparent text-[#5F6368] hover:text-[#202124] hover:bg-[#F5F6F8]'
+                        ? theme === 'light'
+                          ? 'border-[#0284C7] text-[#0284C7] font-bold bg-[#F1F5F9]'
+                          : 'border-[#0284C7] text-[#38BDF8] font-bold bg-[#131B2E]'
+                        : theme === 'light'
+                          ? 'border-transparent text-[#475569] hover:text-[#0F172A] hover:bg-[#F8FAFC]'
+                          : 'border-transparent text-[#94A3B8] hover:text-[#F1F5F9] hover:bg-[#131B2E]/50'
                     }`}
                   >
                     {tab.label}
@@ -307,957 +821,243 @@ export default function App() {
               })}
             </div>
 
-            {/* Quick action utility buttons */}
+            {/* Quick Action Utilities */}
             <div className="flex items-center gap-1.5 py-1.5 pl-2">
               <button
                 onClick={() => setCbomOpen(true)}
-                className="px-2.5 py-1 text-xs rounded border border-[#DADCE0] bg-white hover:bg-[#F5F6F8] text-[#202124] font-medium flex items-center gap-1 cursor-pointer"
+                className={`px-2.5 py-1 text-xs rounded border font-medium flex items-center gap-1.5 cursor-pointer transition ${
+                  theme === 'light'
+                    ? 'border-[#CBD5E1] bg-white hover:bg-[#F1F5F9] text-[#0F172A]'
+                    : 'border-[#1E293B] bg-[#131B2E] hover:bg-[#1E293B] text-[#E2E8F0]'
+                }`}
                 title="View CycloneDX Cryptography Bill of Materials"
               >
-                <FileCode className="w-3.5 h-3.5 text-[#2457A6]" />
-                <span className="hidden sm:inline">CBOM Inspector</span>
+                <FileCode className={`w-3.5 h-3.5 ${theme === 'light' ? 'text-[#0284C7]' : 'text-[#38BDF8]'}`} />
+                <span className={`hidden sm:inline font-semibold ${theme === 'light' ? 'text-[#0F172A]' : 'text-[#E2E8F0]'}`}>CBOM</span>
               </button>
               <button
                 onClick={() => setCertModalOpen(true)}
-                className="px-2.5 py-1 text-xs rounded border border-[#DADCE0] bg-white hover:bg-[#F5F6F8] text-[#202124] font-medium flex items-center gap-1 cursor-pointer"
+                className={`px-2.5 py-1 text-xs rounded border font-medium flex items-center gap-1.5 cursor-pointer transition ${
+                  theme === 'light'
+                    ? 'border-[#CBD5E1] bg-white hover:bg-[#F1F5F9] text-[#0F172A]'
+                    : 'border-[#1E293B] bg-[#131B2E] hover:bg-[#1E293B] text-[#E2E8F0]'
+                }`}
                 title="Inspect X.509 PKI Public Key Certificate"
               >
-                <Lock className="w-3.5 h-3.5 text-[#2E7D32]" />
-                <span className="hidden sm:inline">X.509 PKI</span>
+                <Lock className={`w-3.5 h-3.5 ${theme === 'light' ? 'text-[#059669]' : 'text-[#34D399]'}`} />
+                <span className={`hidden sm:inline font-semibold ${theme === 'light' ? 'text-[#0F172A]' : 'text-[#E2E8F0]'}`}>X.509 PKI</span>
               </button>
               <button
                 onClick={() => setEmailAlertModalOpen(true)}
-                className="px-2.5 py-1 text-xs rounded border border-[#DADCE0] bg-white hover:bg-[#F5F6F8] text-[#202124] font-medium flex items-center gap-1 cursor-pointer"
+                className={`px-2.5 py-1 text-xs rounded border font-medium flex items-center gap-1.5 cursor-pointer transition ${
+                  theme === 'light'
+                    ? 'border-[#CBD5E1] bg-white hover:bg-[#F1F5F9] text-[#0F172A]'
+                    : 'border-[#1E293B] bg-[#131B2E] hover:bg-[#1E293B] text-[#E2E8F0]'
+                }`}
                 title="Open Executive Forensic Email Alert Modal"
               >
-                <Mail className="w-3.5 h-3.5 text-[#C62828]" />
-                <span className="hidden sm:inline">Email Alert</span>
+                <Mail className={`w-3.5 h-3.5 ${theme === 'light' ? 'text-[#DC2626]' : 'text-[#F87171]'}`} />
+                <span className={`hidden sm:inline font-semibold ${theme === 'light' ? 'text-[#0F172A]' : 'text-[#E2E8F0]'}`}>Alert</span>
               </button>
             </div>
           </div>
         </nav>
 
-        {/* 3. 1-Click Test Scenarios Bar */}
-        <div className="bg-white border-b border-[#DADCE0] py-2">
-          <div className="max-w-[1200px] mx-auto px-4">
-            <div className="flex items-center gap-2 overflow-x-auto no-scrollbar text-xs">
-              <span className="text-[11px] font-bold text-[#5F6368] uppercase shrink-0">
-                1-Click Scenarios:
+        {/* ===================================================================== */}
+        {/* 3. 1-CLICK RESEARCH PRESETS STRIP */}
+        {/* ===================================================================== */}
+        <div className={`border-b py-2 ${
+          theme === 'light' ? 'bg-[#F8FAFC] border-[#CBD5E1]' : 'bg-[#0B0F19] border-[#1E293B]'
+        }`}>
+          <div className="max-w-[1240px] mx-auto px-4">
+            <div className="flex items-center gap-1.5 overflow-x-auto text-xs">
+              <span className={`text-[11px] font-mono uppercase shrink-0 mr-1 ${
+                theme === 'light' ? 'text-[#475569]' : 'text-[#64748B]'
+              }`}>
+                Presets:
               </span>
               {[
                 { id: 'test_1_secure.txt', label: '1: Secure' },
                 { id: 'test_2_replay_attack.txt', label: '2: Replay' },
                 { id: 'test_3_forgery_attack.txt', label: '3: Forgery' },
-                { id: 'test_4_impersonation.txt', label: '4: Impersonation' },
-                { id: 'test_5_channel_tampering.txt', label: '5: Tampering' },
-                { id: 'test_6_quantum_eavesdropping.txt', label: '6: Eavesdropping' },
-                { id: 'test_7_multiple_threats.txt', label: '7: Multi-Threat' },
-                { id: 'test_8_dilithium_pqc.txt', label: '8: Dilithium PQC' },
-                { id: 'test_9_rsa2048_pki_pass.txt', label: '9: RSA PKI Pass' },
-                { id: 'test_10_ecdsa_pki_fail.txt', label: '10: ECDSA PKI Fail' },
-              ].map((s) => (
-                <button
-                  key={s.id}
-                  onClick={() => handleLoadSample(s.id)}
-                  disabled={loading}
-                  className={`px-2 py-1 rounded border text-[11px] font-mono whitespace-nowrap cursor-pointer transition ${
-                    data?.file.filename === s.id
-                      ? 'bg-[#2457A6] text-white border-[#2457A6] font-bold'
-                      : 'bg-[#F5F6F8] text-[#202124] border-[#DADCE0] hover:bg-[#E8EAED]'
-                  }`}
-                >
-                  {s.label}
-                </button>
-              ))}
+                { id: 'test_4_impersonation.txt', label: '4: Impersonate' },
+                { id: 'test_5_tampering.txt', label: '5: Tamper' },
+                { id: 'test_6_quantum_eavesdropping.txt', label: '6: Quantum QBER' },
+                { id: 'test_7_intercept_resend.txt', label: '7: Intercept-Resend' },
+                { id: 'test_8_expired_cert.txt', label: '8: Expired Cert' }
+              ].map((s) => {
+                const isSelected = activeSampleId === s.id && !selectedFile;
+                return (
+                  <button
+                    key={s.id}
+                    onClick={() => handleLoadSample(s.id)}
+                    className={`px-2.5 py-1 rounded text-xs whitespace-nowrap transition cursor-pointer border ${
+                      isSelected
+                        ? 'bg-[#0284C7] text-white border-[#0284C7] font-semibold shadow-xs'
+                        : theme === 'light'
+                          ? 'bg-white text-[#334155] border-[#CBD5E1] hover:bg-[#F1F5F9] hover:text-[#0F172A]'
+                          : 'bg-[#111827] text-[#94A3B8] border-[#1E293B] hover:bg-[#162032] hover:text-[#F1F5F9]'
+                    }`}
+                  >
+                    {s.label}
+                  </button>
+                );
+              })}
             </div>
           </div>
         </div>
 
-        {/* 4. Main Container */}
-        <main className="max-w-[1200px] mx-auto px-4 py-5 space-y-5">
-          {/* Top Summary 4-Panel Row */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            {/* Panel 1: File Status */}
-            <div className="bg-white border border-[#DADCE0] rounded-md p-3.5 transition-all">
-              <div className="text-[11px] font-bold uppercase text-[#5F6368]">File Status</div>
-              <div className={`text-base font-bold font-mono mt-1 ${
-                isAttack || data?.signature?.hash_mismatch ? 'text-[#C62828]' : 'text-[#2E7D32]'
-              }`}>
-                {isAttack || data?.signature?.hash_mismatch ? 'COMPROMISED' : 'SECURE'}
-              </div>
-              <div className="text-[11px] text-[#5F6368] mt-0.5 truncate font-mono" title={data?.file?.filename}>
-                {data?.file?.filename || 'No file selected'} ({data?.file?.file_size || '0 B'})
-              </div>
-            </div>
-
-            {/* Panel 2: Signature Status */}
-            <div className="bg-white border border-[#DADCE0] rounded-md p-3.5 transition-all">
-              <div className="text-[11px] font-bold uppercase text-[#5F6368]">Signature Status</div>
-              <div className={`text-base font-bold font-mono mt-1 ${
-                data?.signature?.signature_status === 'VALID' || data?.cryptographic_verification?.is_verified ? 'text-[#2E7D32]' : 'text-[#C62828]'
-              }`}>
-                {data?.signature?.signature_status || 'NOT AVAILABLE'}
-              </div>
-              <div className="text-[11px] text-[#5F6368] mt-0.5 truncate">
-                {data?.cryptographic_verification?.algorithm_detected || data?.signature?.signature_algorithm || 'ECDSA / RSA-2048'}
-              </div>
-            </div>
-
-            {/* Panel 3: Threat Status */}
-            <div className="bg-white border border-[#DADCE0] rounded-md p-3.5 transition-all">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-bold uppercase text-[#5F6368]">Threat Status</span>
-                {loading && (
-                  <span className="text-[10px] text-[#2457A6] font-mono animate-pulse font-semibold">ANALYZING...</span>
-                )}
-              </div>
-              <div className={`text-base font-bold font-mono mt-1 ${
-                isAttack ? 'text-[#C62828]' : 'text-[#2E7D32]'
-              }`}>
-                {isAttack ? 'ATTACK DETECTED' : 'SECURE'}
-              </div>
-              <div className="text-[11px] text-[#5F6368] mt-0.5 truncate" title={isAttack ? data?.threat?.detected_threat : 'No threat detected'}>
-                {isAttack ? (data?.threat?.detected_threat || 'Threat Detected') : 'Intact • Verified Channel'}
-              </div>
-            </div>
-
-            {/* Panel 4: Risk Score */}
-            <div className="bg-white border border-[#DADCE0] rounded-md p-3.5 transition-all">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-bold uppercase text-[#5F6368]">Risk Score</span>
-                <span className={`text-xs font-bold font-mono px-1.5 py-0.2 rounded border ${
-                  riskScore >= 80
-                    ? 'bg-[#FFEBEE] text-[#C62828] border-[#FFCDD2]'
-                    : riskScore >= 50
-                    ? 'bg-[#FFF3E0] text-[#B26A00] border-[#FFE0B2]'
-                    : 'bg-[#E8F5E9] text-[#2E7D32] border-[#C8E6C9]'
-                }`}>
-                  {riskLevel}
-                </span>
-              </div>
-              <div className="text-base font-bold font-mono mt-1 text-[#202124]">
-                {riskScore} / 100
-              </div>
-              {/* Horizontal Progress Bar */}
-              <div className="w-full bg-[#F5F6F8] border border-[#DADCE0] rounded-full h-2 mt-1.5 overflow-hidden">
-                <div
-                  className="h-full rounded-full transition-all duration-300"
-                  style={{
-                    width: `${riskScore}%`,
-                    backgroundColor: getRiskScoreColor(riskScore)
-                  }}
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* ========================================================================= */}
-          {/* TAB: DASHBOARD VIEW */}
-          {/* ========================================================================= */}
-          {activeTab === 'dashboard' && data && (
-            <div className="space-y-5">
-              {/* 2-Column Grid */}
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-                {/* Left Column: File Ingestion & Cryptography (5 cols) */}
-                <div className="lg:col-span-5 space-y-4">
-                  {/* File Upload Panel */}
-                  <div className="bg-white border border-[#DADCE0] rounded-md p-4 space-y-3">
-                    <div className="border-b border-[#DADCE0] pb-2">
-                      <h3 className="text-xs font-bold uppercase tracking-wider text-[#202124]">
-                        Digital Signature File Ingestion
-                      </h3>
-                      <p className="text-[11px] text-[#5F6368]">
-                        Select or drop a signed artifact for automated analysis
-                      </p>
-                    </div>
-
-                    <div
-                      onClick={() => fileInputRef.current?.click()}
-                      onDragOver={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        setIsDragging(true);
-                      }}
-                      onDragEnter={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        setIsDragging(true);
-                      }}
-                      onDragLeave={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        setIsDragging(false);
-                      }}
-                      onDrop={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        setIsDragging(false);
-                        if (e.dataTransfer.files?.[0]) {
-                          handleFileUpload(e.dataTransfer.files[0]);
-                        }
-                      }}
-                      className={`border-2 border-dashed rounded p-4 text-center cursor-pointer transition ${
-                        isDragging
-                          ? 'border-[#2457A6] bg-[#E8F0FE]'
-                          : 'border-[#DADCE0] hover:border-[#2457A6] bg-[#F5F6F8]'
-                      }`}
-                    >
-                      <input
-                        ref={fileInputRef}
-                        type="file"
-                        onChange={(e) => {
-                          if (e.target.files?.[0]) {
-                            handleFileUpload(e.target.files[0]);
-                            e.target.value = '';
-                          }
-                        }}
-                        className="hidden"
-                      />
-                      <Upload className="w-5 h-5 mx-auto text-[#5F6368] mb-1" />
-                      <div className="text-xs font-semibold text-[#202124]">
-                        {selectedFile ? `Selected: ${selectedFile.name}` : 'Click to select file or drag & drop'}
-                      </div>
-                      <div className="text-[11px] text-[#5F6368] mt-0.5">
-                        Supports .txt, .json, .pem, .sig, .bin
-                      </div>
-                    </div>
-
-                    {/* Mode & Reference Digest */}
-                    <div className="space-y-2 text-xs">
-                      <div>
-                        <label className="block text-[11px] font-semibold text-[#5F6368] mb-1">
-                          Threat Detection Mode
-                        </label>
-                        <select
-                          value={mode}
-                          onChange={(e) => handleModeChange(e.target.value)}
-                          className="w-full bg-white border border-[#DADCE0] rounded px-2.5 py-1.5 text-xs text-[#202124]"
-                        >
-                          <option value="Automatic Detection">Automatic Detection (All Vectors)</option>
-                          <option value="Signature Integrity Only">Signature Integrity Only</option>
-                          <option value="Quantum Channel Analysis">Quantum Channel Analysis</option>
-                          <option value="Replay Attack Verification">Replay Attack Verification</option>
-                          <option value="Forgery Detection">Forgery Detection</option>
-                        </select>
-                      </div>
-
-                      <div>
-                        <label className="block text-[11px] font-semibold text-[#5F6368] mb-1">
-                          Optional Reference SHA-256 Digest
-                        </label>
-                        <input
-                          type="text"
-                          value={referenceHashInput}
-                          onChange={(e) => setReferenceHashInput(e.target.value)}
-                          placeholder="e.g. e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-                          className="w-full bg-white border border-[#DADCE0] rounded px-2.5 py-1.5 text-xs font-mono text-[#202124]"
-                        />
-                      </div>
-
-                      <div className="flex gap-2 pt-1">
-                        <button
-                          onClick={() => {
-                            if (selectedFile) handleFileUpload(selectedFile);
-                            else handleLoadSample('test_1_secure.txt');
-                          }}
-                          disabled={loading}
-                          className="flex-1 py-1.5 bg-[#2457A6] hover:bg-[#1E4B8F] text-white text-xs font-semibold rounded cursor-pointer transition disabled:opacity-50"
-                        >
-                          {loading ? 'Analyzing...' : 'Analyze File'}
-                        </button>
-                        <button
-                          onClick={() => {
-                            setSelectedFile(null);
-                            setReferenceHashInput('');
-                            handleLoadSample('test_1_secure.txt');
-                          }}
-                          className="px-3 py-1.5 bg-white border border-[#DADCE0] hover:bg-[#F5F6F8] text-[#202124] text-xs font-medium rounded cursor-pointer transition"
-                        >
-                          Reset
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Cryptographic Layer Panel */}
-                  <div className="bg-white border border-[#DADCE0] rounded-md p-4 space-y-3">
-                    <div className="flex items-center justify-between border-b border-[#DADCE0] pb-2">
-                      <h3 className="text-xs font-bold uppercase tracking-wider text-[#202124]">
-                        Cryptographic Verification Layer
-                      </h3>
-                      <span className="text-[10px] font-mono px-1.5 py-0.2 rounded border border-[#DADCE0] bg-[#F5F6F8] text-[#5F6368]">
-                        RFC 5280 PKI
-                      </span>
-                    </div>
-
-                    <div className="space-y-1.5 text-xs font-mono">
-                      <div className="flex justify-between py-1 border-b border-[#DADCE0]">
-                        <span className="text-[#5F6368]">Algorithm:</span>
-                        <span className="font-bold text-[#202124]">
-                          {data.cryptographic_verification?.algorithm_detected || data.signature.signature_algorithm}
-                        </span>
-                      </div>
-                      <div className="flex justify-between py-1 border-b border-[#DADCE0]">
-                        <span className="text-[#5F6368]">Key Size:</span>
-                        <span className="text-[#202124]">
-                          {data.cryptographic_verification?.key_size_bits || 2048} bits
-                        </span>
-                      </div>
-                      <div className="flex justify-between py-1 border-b border-[#DADCE0]">
-                        <span className="text-[#5F6368]">Shor's Quantum Impact:</span>
-                        <span className="font-bold text-[#B26A00]">
-                          {data.cryptographic_verification?.vulnerable_to_shors ? 'Vulnerable (O(n³))' : 'Quantum-Resistant'}
-                        </span>
-                      </div>
-                      <div className="flex justify-between py-1 border-b border-[#DADCE0]">
-                        <span className="text-[#5F6368]">NIST Standard:</span>
-                        <span className="text-[#202124]">
-                          {data.cryptographic_verification?.nist_standard_status || 'FIPS 186-5'}
-                        </span>
-                      </div>
-                      <div className="flex justify-between py-1">
-                        <span className="text-[#5F6368]">Signer DN:</span>
-                        <span className="text-[#2457A6] truncate max-w-[200px]" title={data.signature.signer_information}>
-                          {data.signature.signer_information}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Right Column: Prominent Threat Analysis (7 cols) */}
-                <div className="lg:col-span-7 space-y-4">
-                  {/* Threat Analysis Report Card */}
-                  <div className={`bg-white border rounded-md p-4 space-y-3.5 ${
-                    isAttack ? 'border-[#C62828]' : 'border-[#2E7D32]'
-                  }`}>
-                    {/* Header */}
-                    <div className="flex items-center justify-between border-b border-[#DADCE0] pb-2.5">
-                      <div className="flex items-center gap-2">
-                        <div className={`w-6 h-6 rounded flex items-center justify-center text-white ${
-                          isAttack ? 'bg-[#C62828]' : 'bg-[#2E7D32]'
-                        }`}>
-                          {isAttack ? <ShieldAlert className="w-3.5 h-3.5" /> : <ShieldCheck className="w-3.5 h-3.5" />}
-                        </div>
-                        <div>
-                          <h3 className="text-xs font-bold uppercase tracking-wider text-[#202124]">
-                            Security Threat Analysis Report
-                          </h3>
-                          <span className="text-[11px] text-[#5F6368] font-mono">
-                            Case {data.case_id} &bull; Engine Confidence: {data.threat.confidence}%
-                          </span>
-                        </div>
-                      </div>
-
-                      <span className={`px-2 py-0.5 rounded text-xs font-bold font-mono border uppercase ${
-                        isAttack ? 'bg-[#FFEBEE] text-[#C62828] border-[#FFCDD2]' : 'bg-[#E8F5E9] text-[#2E7D32] border-[#C8E6C9]'
-                      }`}>
-                        {data.threat.status}
-                      </span>
-                    </div>
-
-                    {/* Threat Details Grid */}
-                    <div className="grid grid-cols-2 gap-2 text-xs">
-                      <div className="p-2.5 bg-[#F5F6F8] rounded border border-[#DADCE0]">
-                        <span className="text-[10px] font-bold text-[#5F6368] uppercase block">Detected Threat</span>
-                        <span className="font-bold text-[#202124] text-xs font-mono mt-0.5 block truncate">
-                          {data.threat.detected_threat}
-                        </span>
-                      </div>
-                      <div className="p-2.5 bg-[#F5F6F8] rounded border border-[#DADCE0]">
-                        <span className="text-[10px] font-bold text-[#5F6368] uppercase block">Threat Category</span>
-                        <span className="font-bold text-[#202124] text-xs font-mono mt-0.5 block truncate">
-                          {data.threat.threat_category}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Why was it detected? */}
-                    <div className="p-3 bg-[#F5F6F8] rounded border border-[#DADCE0] space-y-1">
-                      <span className="text-xs font-bold text-[#202124] uppercase tracking-wide block">
-                        Detection Rationale / Trigger Reason
-                      </span>
-                      <p className="text-xs text-[#202124] leading-relaxed">
-                        {data.threat.reason}
-                      </p>
-                    </div>
-
-                    {/* Evidence List */}
-                    <div className="space-y-1">
-                      <span className="text-xs font-bold text-[#5F6368] uppercase tracking-wide block">
-                        Observed Cryptographic Evidence ({(data.threat?.evidence || []).length})
-                      </span>
-                      <div className="space-y-1">
-                        {(data.threat?.evidence || []).map((item, idx) => (
-                          <div key={idx} className="flex items-start gap-2 text-xs font-mono p-1.5 bg-[#F5F6F8] rounded border border-[#DADCE0]">
-                            <span className="text-[#2457A6] font-bold">{idx + 1}.</span>
-                            <span className="text-[#202124]">{item}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Immediate Response & Countermeasure */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 pt-1 text-xs">
-                      <div className="p-2.5 rounded border border-[#DADCE0] bg-[#FFF3E0]">
-                        <span className="font-bold text-[#B26A00] block mb-1 uppercase text-[11px]">
-                          First Action to Overcome
-                        </span>
-                        <p className="text-[#202124] text-[11px] leading-relaxed font-mono">
-                          {data.threat.first_action || 'Quarantine file and alert the security operations team.'}
-                        </p>
-                      </div>
-
-                      <div className="p-2.5 rounded border border-[#DADCE0] bg-[#E8F5E9]">
-                        <span className="font-bold text-[#2E7D32] block mb-1 uppercase text-[11px]">
-                          Preventative Countermeasure
-                        </span>
-                        <p className="text-[#202124] text-[11px] leading-relaxed">
-                          {data.threat.recommendation || 'Transition to Post-Quantum Digital Signatures (FIPS 204 ML-DSA).'}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Executive Alert Trigger Panel */}
-                  <ExecutiveForensicAlert
-                    data={data}
-                    isOpen={emailAlertModalOpen}
-                    onOpenChange={setEmailAlertModalOpen}
-                  />
-                </div>
-              </div>
-
-              {/* Security Logs Section (Console Style) */}
-              <div className="bg-white border border-[#DADCE0] rounded-md p-4 space-y-3">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#DADCE0] pb-2.5">
-                  <div className="flex items-center gap-2">
-                    <Terminal className="w-4 h-4 text-[#2457A6]" />
-                    <h3 className="text-xs font-bold uppercase tracking-wider text-[#202124]">
-                      Tamper-Evident Security Audit Logs
-                    </h3>
-                    <span className="text-[10px] font-mono px-1.5 py-0.2 rounded border border-[#DADCE0] bg-[#F5F6F8] text-[#5F6368]">
-                      Chained SHA-256 Ledger
-                    </span>
-                  </div>
-
-                  {/* Filter & Action Buttons */}
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    {(['ALL', 'ALERT', 'WARNING', 'VALID'] as const).map((f) => (
-                      <button
-                        key={f}
-                        onClick={() => setLogFilter(f)}
-                        className={`px-2 py-0.5 rounded text-[11px] font-medium border cursor-pointer ${
-                          logFilter === f
-                            ? 'bg-[#2457A6] text-white border-[#2457A6] font-bold'
-                            : 'bg-white text-[#5F6368] border-[#DADCE0] hover:bg-[#F5F6F8]'
-                        }`}
-                      >
-                        {f}
-                      </button>
-                    ))}
-                    <button
-                      onClick={handleCopyAllLogs}
-                      className="px-2 py-0.5 rounded text-[11px] font-medium border border-[#DADCE0] bg-white hover:bg-[#F5F6F8] text-[#202124] flex items-center gap-1 cursor-pointer"
-                    >
-                      <Copy className="w-3 h-3 text-[#5F6368]" />
-                      <span>{copiedLogHash === 'ALL_LOGS_COPIED' ? 'Copied' : 'Copy All'}</span>
-                    </button>
-                    <button
-                      onClick={handleExportLogs}
-                      className="px-2 py-0.5 rounded text-[11px] font-medium border border-[#DADCE0] bg-white hover:bg-[#F5F6F8] text-[#202124] flex items-center gap-1 cursor-pointer"
-                    >
-                      <Download className="w-3 h-3 text-[#5F6368]" />
-                      <span>Export</span>
-                    </button>
-                  </div>
-                </div>
-
-                {/* Search Bar */}
-                <div className="relative">
-                  <Search className="w-3.5 h-3.5 absolute left-2.5 top-2 text-[#5F6368]" />
-                  <input
-                    type="text"
-                    value={logSearchQuery}
-                    onChange={(e) => setLogSearchQuery(e.target.value)}
-                    placeholder="Search logs by event, status, or hash..."
-                    className="w-full bg-[#F5F6F8] border border-[#DADCE0] rounded pl-8 pr-3 py-1.5 text-xs font-mono text-[#202124] focus:outline-hidden focus:border-[#2457A6]"
-                  />
-                </div>
-
-                {/* Console Log Area */}
-                <div className="bg-[#F5F6F8] border border-[#DADCE0] rounded p-3 font-mono text-xs max-h-64 overflow-y-auto space-y-1.5">
-                  {filteredLogs.length === 0 ? (
-                    <div className="text-center py-4 text-[#5F6368]">No log entries matching filter</div>
-                  ) : (
-                    filteredLogs.map((log, i) => (
-                      <div key={i} className="flex items-start justify-between gap-2 border-b border-[#DADCE0]/60 pb-1 last:border-b-0">
-                        <div className="flex items-start gap-2">
-                          <span className="text-[#5F6368] shrink-0">{log.time}</span>
-                          <span className={`px-1 rounded text-[10px] font-bold shrink-0 ${
-                            log.status === 'ALERT' || log.status === 'ACTION_REQUIRED'
-                              ? 'bg-[#FFEBEE] text-[#C62828]'
-                              : log.status === 'WARNING'
-                              ? 'bg-[#FFF3E0] text-[#B26A00]'
-                              : 'bg-[#E8F5E9] text-[#2E7D32]'
-                          }`}>
-                            {log.status}
-                          </span>
-                          <span className="text-[#202124]">{log.event}</span>
-                        </div>
-                        {log.event_hash && (
-                          <button
-                            onClick={() => handleCopyLogHash(log.event_hash!)}
-                            className="text-[10px] text-[#5F6368] hover:text-[#2457A6] shrink-0 font-mono"
-                            title="Copy event hash"
-                          >
-                            {copiedLogHash === log.event_hash ? 'Copied' : `${log.event_hash.substring(0, 8)}...`}
-                          </button>
-                        )}
-                      </div>
-                    ))
-                  )}
-                  <div ref={logEndRef} />
-                </div>
-              </div>
-
-              {/* 8-Vector Attack Matrix */}
-              <div className="bg-white border border-[#DADCE0] rounded-md p-4 space-y-3">
-                <div className="flex items-center justify-between border-b border-[#DADCE0] pb-2.5">
-                  <div>
-                    <h3 className="text-xs font-bold uppercase tracking-wider text-[#202124]">
-                      Attack Scenario Analysis Matrix
-                    </h3>
-                    <p className="text-[11px] text-[#5F6368]">
-                      Evaluation across 8 primary cryptographic and quantum attack vectors
-                    </p>
-                  </div>
-                  <button
-                    onClick={handleExportJSON}
-                    className="px-2.5 py-1 text-xs font-medium rounded border border-[#DADCE0] bg-white hover:bg-[#F5F6F8] text-[#202124] flex items-center gap-1 cursor-pointer"
-                  >
-                    <Download className="w-3.5 h-3.5 text-[#2457A6]" />
-                    <span>Download JSON Matrix</span>
-                  </button>
-                </div>
-
-                <div className="border border-[#DADCE0] rounded overflow-hidden">
-                  <table className="w-full text-left text-xs border-collapse font-mono">
-                    <thead>
-                      <tr className="bg-[#F5F6F8] border-b border-[#DADCE0] text-[#5F6368] font-sans font-bold">
-                        <th className="py-2 px-3">Vector</th>
-                        <th className="py-2 px-3">Status</th>
-                        <th className="py-2 px-3">Risk Level</th>
-                        <th className="py-2 px-3">Score</th>
-                        <th className="py-2 px-3">Detection Rationale</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-[#DADCE0] text-[11px]">
-                      {(data.attack_matrix || []).map((row, idx) => (
-                        <tr key={idx} className={row.status === 'ATTACK DETECTED' ? 'bg-[#FFEBEE]/30' : 'hover:bg-[#F5F6F8]'}>
-                          <td className="py-2 px-3 font-semibold text-[#202124] font-sans">{row.vector_name}</td>
-                          <td className="py-2 px-3">
-                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold border ${
-                              row.status === 'ATTACK DETECTED'
-                                ? 'bg-[#FFEBEE] text-[#C62828] border-[#FFCDD2]'
-                                : 'bg-[#E8F5E9] text-[#2E7D32] border-[#C8E6C9]'
-                            }`}>
-                              {row.status}
-                            </span>
-                          </td>
-                          <td className="py-2 px-3 text-[#5F6368]">{row.risk_level}</td>
-                          <td className="py-2 px-3 font-bold text-[#202124]">{row.score}</td>
-                          <td className="py-2 px-3 text-[#5F6368] font-sans truncate max-w-xs" title={row.detection_notes}>
-                            {row.detection_notes}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
+        {/* ===================================================================== */}
+        {/* 4. MAIN CONTENT VIEW CONTROLLER */}
+        {/* ===================================================================== */}
+        <main className="max-w-[1240px] mx-auto px-4 py-5">
+          {activeTab === 'dashboard' && (
+            <DashboardView
+              data={data}
+              history={history}
+              filesAnalyzedCount={filesAnalyzedCount}
+              storageStatus={storageStatus}
+              theme={theme}
+              onRefreshCases={loadSavedCases}
+              onSelectCase={handleSelectCaseFromHistory}
+              onNavigateToAnalyzer={() => setActiveTab('analyzer')}
+              onNavigateToReport={() => setActiveTab('reports')}
+              onLoadSample={handleLoadSample}
+              onFileUpload={handleFileUpload}
+              loading={loading}
+              analysisState={analysisState}
+              uploadProgress={uploadProgress}
+              onCancelUpload={handleCancelUpload}
+              selectedFile={selectedFile}
+              onRunAnalysis={() => {
+                if (selectedFile) handleFileUpload(selectedFile);
+                else if (activeSampleId) handleLoadSample(activeSampleId);
+              }}
+              activeSampleId={activeSampleId}
+              mode={mode}
+              onModeChange={handleModeChange}
+              errorMessage={errorMessage}
+              errorDetails={errorDetails}
+              onDismissError={() => {
+                setErrorMessage(null);
+                setErrorDetails(null);
+              }}
+            />
           )}
 
-          {/* ========================================================================= */}
-          {/* TAB: FILE ANALYSIS FOCUSED VIEW */}
-          {/* ========================================================================= */}
-          {activeTab === 'file-analysis' && data && (
-            <div className="space-y-4">
-              <div className="bg-white border border-[#DADCE0] rounded-md p-4 space-y-3">
-                <h3 className="text-sm font-bold text-[#202124]">Digital Signature File Ingestion &amp; Verification</h3>
-                <p className="text-xs text-[#5F6368]">
-                  Upload target document, raw payload, or PKCS#7 / CMS signed artifact for byte-level inspection.
-                </p>
-
-                <div
-                  onClick={() => fileInputRef.current?.click()}
-                  onDragOver={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setIsDragging(true);
-                  }}
-                  onDragEnter={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setIsDragging(true);
-                  }}
-                  onDragLeave={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setIsDragging(false);
-                  }}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setIsDragging(false);
-                    if (e.dataTransfer.files?.[0]) {
-                      handleFileUpload(e.dataTransfer.files[0]);
-                    }
-                  }}
-                  className={`border-2 border-dashed rounded p-6 text-center cursor-pointer transition ${
-                    isDragging
-                      ? 'border-[#2457A6] bg-[#E8F0FE]'
-                      : 'border-[#DADCE0] hover:border-[#2457A6] bg-[#F5F6F8]'
-                  }`}
-                >
-                  <Upload className="w-6 h-6 mx-auto text-[#5F6368] mb-1.5" />
-                  <div className="text-xs font-bold text-[#202124]">
-                    {selectedFile ? `Selected: ${selectedFile.name}` : 'Choose a file to analyze'}
-                  </div>
-                  <div className="text-[11px] text-[#5F6368] mt-0.5">Click to browse or drag &amp; drop file here</div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                  <div>
-                    <label className="block font-semibold text-[#5F6368] mb-1">Detection Mode</label>
-                    <select
-                      value={mode}
-                      onChange={(e) => handleModeChange(e.target.value)}
-                      className="w-full bg-white border border-[#DADCE0] rounded px-2.5 py-1.5 text-xs text-[#202124]"
-                    >
-                      <option value="Automatic Detection">Automatic Detection (All Vectors)</option>
-                      <option value="Signature Integrity Only">Signature Integrity Only</option>
-                      <option value="Quantum Channel Analysis">Quantum Channel Analysis</option>
-                      <option value="Replay Attack Verification">Replay Attack Verification</option>
-                      <option value="Forgery Detection">Forgery Detection</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block font-semibold text-[#5F6368] mb-1">Optional Reference SHA-256 Digest</label>
-                    <input
-                      type="text"
-                      value={referenceHashInput}
-                      onChange={(e) => setReferenceHashInput(e.target.value)}
-                      placeholder="Expected SHA-256 hex string..."
-                      className="w-full bg-white border border-[#DADCE0] rounded px-2.5 py-1.5 text-xs font-mono text-[#202124]"
-                    />
-                  </div>
-                </div>
-
-                <button
-                  onClick={() => {
-                    if (selectedFile) handleFileUpload(selectedFile);
-                    else handleLoadSample('test_1_secure.txt');
-                  }}
-                  disabled={loading}
-                  className="px-4 py-2 bg-[#2457A6] hover:bg-[#1E4B8F] text-white text-xs font-semibold rounded cursor-pointer"
-                >
-                  {loading ? 'Analyzing File...' : 'Run Analysis'}
-                </button>
-              </div>
-
-              {/* Active File Details */}
-              <div className="bg-white border border-[#DADCE0] rounded-md p-4 space-y-3">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-[#202124]">Current File Metadata</h4>
-                <div className="border border-[#DADCE0] rounded overflow-hidden">
-                  <table className="w-full text-left text-xs border-collapse font-mono">
-                    <tbody className="divide-y divide-[#DADCE0]">
-                      <tr>
-                        <td className="py-2 px-3 font-semibold text-[#5F6368] bg-[#F5F6F8] w-1/4">Filename</td>
-                        <td className="py-2 px-3 text-[#202124]">{data.file.filename}</td>
-                      </tr>
-                      <tr>
-                        <td className="py-2 px-3 font-semibold text-[#5F6368] bg-[#F5F6F8]">File Size</td>
-                        <td className="py-2 px-3 text-[#202124]">{data.file.file_size}</td>
-                      </tr>
-                      <tr>
-                        <td className="py-2 px-3 font-semibold text-[#5F6368] bg-[#F5F6F8]">SHA-256 Digest</td>
-                        <td className="py-2 px-3 text-[#202124] truncate">{data.file.sha256}</td>
-                      </tr>
-                      <tr>
-                        <td className="py-2 px-3 font-semibold text-[#5F6368] bg-[#F5F6F8]">Upload Timestamp</td>
-                        <td className="py-2 px-3 text-[#202124]">{data.file.upload_time}</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
+          {activeTab === 'analyzer' && (
+            <AnalyzerView
+              data={data}
+              loading={loading}
+              analysisState={analysisState}
+              currentStepIndex={currentStepIndex}
+              elapsedSeconds={elapsedSeconds}
+              currentOperation={currentOperation}
+              errorMessage={errorMessage}
+              errorDetails={errorDetails}
+              selectedFile={selectedFile}
+              uploadProgress={uploadProgress}
+              onCancelUpload={handleCancelUpload}
+              mode={mode}
+              referenceHashInput={referenceHashInput}
+              onModeChange={handleModeChange}
+              onReferenceHashChange={setReferenceHashInput}
+              onFileUpload={handleFileUpload}
+              onRunAnalysis={() => {
+                if (selectedFile) handleFileUpload(selectedFile);
+                else if (activeSampleId) handleLoadSample(activeSampleId);
+              }}
+              onReset={handleReset}
+              onRetry={handleRetry}
+              onDismissError={() => setErrorMessage(null)}
+              onOpenCertModal={() => setCertModalOpen(true)}
+              onOpenCbomModal={() => setCbomOpen(true)}
+            />
           )}
 
-          {/* ========================================================================= */}
-          {/* TAB: QUANTUM SECURITY LAB */}
-          {/* ========================================================================= */}
+          {activeTab === 'attack-sim' && (
+            <AttackSimulationView
+              onLoadAndAnalyze={(sampleId) => {
+                handleLoadSample(sampleId);
+                setActiveTab('analyzer');
+              }}
+            />
+          )}
+
           {activeTab === 'quantum-lab' && (
             <QuantumSecurityLab />
           )}
 
-          {/* ========================================================================= */}
-          {/* TAB: THREAT DETECTION REPORT */}
-          {/* ========================================================================= */}
-          {activeTab === 'threat-detection' && data && (
-            <div className="space-y-4">
-              {/* Detailed Threat Report */}
-              <div className="bg-white border border-[#DADCE0] rounded-md p-4 space-y-4">
-                <div className="flex items-center justify-between border-b border-[#DADCE0] pb-3">
-                  <div>
-                    <h3 className="text-sm font-bold text-[#202124]">Security Threat Assessment</h3>
-                    <p className="text-xs text-[#5F6368]">
-                      Comprehensive rule-based heuristics, signature integrity, and replay cache evaluation
-                    </p>
-                  </div>
-                  <span className={`px-2.5 py-1 rounded text-xs font-bold font-mono border ${
-                    isAttack ? 'bg-[#FFEBEE] text-[#C62828] border-[#FFCDD2]' : 'bg-[#E8F5E9] text-[#2E7D32] border-[#C8E6C9]'
-                  }`}>
-                    {data.threat.status} ({data.threat.risk} RISK)
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
-                  <div className="p-3 bg-[#F5F6F8] rounded border border-[#DADCE0]">
-                    <span className="font-bold text-[#5F6368] block uppercase text-[10px]">Threat Type</span>
-                    <span className="font-bold text-[#202124] text-xs font-mono mt-1 block">{data.threat.detected_threat}</span>
-                  </div>
-                  <div className="p-3 bg-[#F5F6F8] rounded border border-[#DADCE0]">
-                    <span className="font-bold text-[#5F6368] block uppercase text-[10px]">Category</span>
-                    <span className="font-bold text-[#202124] text-xs font-mono mt-1 block">{data.threat.threat_category}</span>
-                  </div>
-                  <div className="p-3 bg-[#F5F6F8] rounded border border-[#DADCE0]">
-                    <span className="font-bold text-[#5F6368] block uppercase text-[10px]">Risk Score</span>
-                    <span className="font-bold text-[#202124] text-xs font-mono mt-1 block">{data.threat.risk_score} / 100</span>
-                  </div>
-                </div>
-
-                <div className="p-3 bg-[#F5F6F8] rounded border border-[#DADCE0] space-y-1 text-xs">
-                  <span className="font-bold text-[#202124] uppercase">Detailed Detection Rationale:</span>
-                  <p className="text-[#202124] leading-relaxed">{data.threat.reason}</p>
-                </div>
-
-                <div className="space-y-2 text-xs">
-                  <span className="font-bold text-[#5F6368] uppercase">Evidence Indicators:</span>
-                  <div className="space-y-1 font-mono">
-                    {(data.threat?.evidence || []).map((e, idx) => (
-                      <div key={idx} className="p-2 bg-[#F5F6F8] rounded border border-[#DADCE0] flex items-start gap-2">
-                        <span className="text-[#2457A6] font-bold">{idx + 1}.</span>
-                        <span>{e}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              {/* 8-Vector Attack Matrix */}
-              <div className="bg-white border border-[#DADCE0] rounded-md p-4 space-y-3">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-[#202124]">
-                  8-Vector Attack Scenario Matrix
-                </h4>
-                <div className="border border-[#DADCE0] rounded overflow-hidden">
-                  <table className="w-full text-left text-xs border-collapse font-mono">
-                    <thead>
-                      <tr className="bg-[#F5F6F8] border-b border-[#DADCE0] text-[#5F6368] font-sans font-bold">
-                        <th className="py-2 px-3">Vector</th>
-                        <th className="py-2 px-3">Status</th>
-                        <th className="py-2 px-3">Risk Level</th>
-                        <th className="py-2 px-3">Score</th>
-                        <th className="py-2 px-3">Detection Rationale</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-[#DADCE0] text-[11px]">
-                      {(data.attack_matrix || []).map((row, idx) => (
-                        <tr key={idx} className={row.status === 'ATTACK DETECTED' ? 'bg-[#FFEBEE]/30' : 'hover:bg-[#F5F6F8]'}>
-                          <td className="py-2 px-3 font-semibold text-[#202124] font-sans">{row.vector_name}</td>
-                          <td className="py-2 px-3">
-                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold border ${
-                              row.status === 'ATTACK DETECTED'
-                                ? 'bg-[#FFEBEE] text-[#C62828] border-[#FFCDD2]'
-                                : 'bg-[#E8F5E9] text-[#2E7D32] border-[#C8E6C9]'
-                            }`}>
-                              {row.status}
-                            </span>
-                          </td>
-                          <td className="py-2 px-3 text-[#5F6368]">{row.risk_level}</td>
-                          <td className="py-2 px-3 font-bold text-[#202124]">{row.score}</td>
-                          <td className="py-2 px-3 text-[#5F6368] font-sans truncate max-w-xs">{row.detection_notes}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
+          {activeTab === 'reports' && (
+            <ReportView data={data} theme={theme} />
           )}
 
-          {/* ========================================================================= */}
-          {/* TAB: SECURITY LOGS */}
-          {/* ========================================================================= */}
-          {activeTab === 'logs' && data && (
-            <div className="space-y-4">
-              <div className="bg-white border border-[#DADCE0] rounded-md p-4 space-y-3">
-                <div className="flex items-center justify-between border-b border-[#DADCE0] pb-2.5">
-                  <div>
-                    <h3 className="text-xs font-bold uppercase tracking-wider text-[#202124]">
-                      Tamper-Evident Chained Audit Logs
-                    </h3>
-                    <p className="text-[11px] text-[#5F6368]">
-                      Each event is cryptographically hashed and chained to previous entry for non-repudiation
-                    </p>
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={handleCopyAllLogs}
-                      className="px-2.5 py-1 text-xs rounded border border-[#DADCE0] bg-white hover:bg-[#F5F6F8] text-[#202124] font-medium flex items-center gap-1 cursor-pointer"
-                    >
-                      <Copy className="w-3 h-3 text-[#5F6368]" />
-                      <span>{copiedLogHash === 'ALL_LOGS_COPIED' ? 'Copied' : 'Copy All'}</span>
-                    </button>
-                    <button
-                      onClick={handleExportLogs}
-                      className="px-2.5 py-1 text-xs rounded border border-[#DADCE0] bg-white hover:bg-[#F5F6F8] text-[#202124] font-medium flex items-center gap-1 cursor-pointer"
-                    >
-                      <Download className="w-3 h-3 text-[#5F6368]" />
-                      <span>Export TXT</span>
-                    </button>
-                  </div>
-                </div>
-
-                {/* Filter and Search */}
-                <div className="flex items-center gap-2 flex-wrap">
-                  {(['ALL', 'ALERT', 'WARNING', 'VALID'] as const).map((f) => (
-                    <button
-                      key={f}
-                      onClick={() => setLogFilter(f)}
-                      className={`px-2.5 py-1 rounded text-xs font-medium border cursor-pointer ${
-                        logFilter === f
-                          ? 'bg-[#2457A6] text-white border-[#2457A6] font-bold'
-                          : 'bg-white text-[#5F6368] border-[#DADCE0] hover:bg-[#F5F6F8]'
-                      }`}
-                    >
-                      {f}
-                    </button>
-                  ))}
-                  <input
-                    type="text"
-                    value={logSearchQuery}
-                    onChange={(e) => setLogSearchQuery(e.target.value)}
-                    placeholder="Search logs..."
-                    className="flex-1 bg-[#F5F6F8] border border-[#DADCE0] rounded px-3 py-1 text-xs font-mono text-[#202124]"
-                  />
-                </div>
-
-                <div className="bg-[#F5F6F8] border border-[#DADCE0] rounded p-3 font-mono text-xs max-h-96 overflow-y-auto space-y-1.5">
-                  {filteredLogs.map((log, i) => (
-                    <div key={i} className="flex items-start justify-between gap-2 border-b border-[#DADCE0]/60 pb-1 last:border-b-0">
-                      <div className="flex items-start gap-2">
-                        <span className="text-[#5F6368] shrink-0">{log.time}</span>
-                        <span className={`px-1 rounded text-[10px] font-bold shrink-0 ${
-                          log.status === 'ALERT' || log.status === 'ACTION_REQUIRED'
-                            ? 'bg-[#FFEBEE] text-[#C62828]'
-                            : log.status === 'WARNING'
-                            ? 'bg-[#FFF3E0] text-[#B26A00]'
-                            : 'bg-[#E8F5E9] text-[#2E7D32]'
-                        }`}>
-                          {log.status}
-                        </span>
-                        <span className="text-[#202124]">{log.event}</span>
-                      </div>
-                      {log.event_hash && (
-                        <span className="text-[10px] text-[#5F6368] font-mono shrink-0">
-                          {log.event_hash.substring(0, 12)}...
-                        </span>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* ========================================================================= */}
-          {/* TAB: LAB GUIDE */}
-          {/* ========================================================================= */}
-          {activeTab === 'guide' && (
-            <div className="space-y-4">
-              <div className="bg-white border border-[#DADCE0] rounded-md p-4 space-y-3">
-                <h3 className="text-sm font-bold text-[#202124]">Local Research Lab Execution Guide</h3>
-                <p className="text-xs text-[#5F6368]">
-                  Step-by-step instructions for running this prototype in VS Code with Python and Flask.
-                </p>
-
-                <div className="p-3 bg-[#F5F6F8] rounded border border-[#DADCE0] space-y-2 text-xs">
-                  <div className="font-bold text-[#202124]">1. Python Environment Setup</div>
-                  <pre className="p-2.5 bg-white rounded border border-[#DADCE0] font-mono text-[11px] overflow-x-auto text-[#202124]">
-{`# Create virtual environment
-python3 -m venv venv
-source venv/bin/activate  # On Windows: venv\\Scripts\\activate
-
-# Install dependencies
-pip install flask cryptography qiskit numpy`}
-                  </pre>
-                </div>
-
-                <div className="p-3 bg-[#F5F6F8] rounded border border-[#DADCE0] space-y-2 text-xs">
-                  <div className="font-bold text-[#202124]">2. Launch Flask Backend Server</div>
-                  <pre className="p-2.5 bg-white rounded border border-[#DADCE0] font-mono text-[11px] overflow-x-auto text-[#202124]">
-{`python3 app.py
-# Backend running at http://127.0.0.1:5000`}
-                  </pre>
-                </div>
-
-                <div className="p-3 bg-[#F5F6F8] rounded border border-[#DADCE0] space-y-2 text-xs">
-                  <div className="font-bold text-[#202124]">3. Launch React Interface</div>
-                  <pre className="p-2.5 bg-white rounded border border-[#DADCE0] font-mono text-[11px] overflow-x-auto text-[#202124]">
-{`npm install
-npm run dev
-# Interface accessible at http://localhost:3000`}
-                  </pre>
-                </div>
-              </div>
-            </div>
+          {activeTab === 'audit-logs' && (
+            <AuditLogsView logs={data?.logs || []} caseId={data?.case_id} />
           )}
         </main>
       </div>
 
-      {/* 5. Footer */}
-      <footer className="bg-white border-t border-[#DADCE0] py-4 mt-8">
-        <div className="max-w-[1200px] mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-[#5F6368]">
+      {/* ===================================================================== */}
+      {/* 5. MODALS & POPUPS */}
+      {/* ===================================================================== */}
+      <CbomModal
+        cbom={data?.cbom}
+        isOpen={cbomOpen}
+        onClose={() => setCbomOpen(false)}
+      />
+
+      <CertificateModal
+        cert={data?.certificate_analysis}
+        isOpen={certModalOpen}
+        onClose={() => setCertModalOpen(false)}
+      />
+
+      <ExecutiveForensicAlert
+        data={data}
+        alert={data?.email_alert}
+        forensicSummary={data?.forensic_summary}
+        isOpen={emailAlertModalOpen}
+        onClose={() => setEmailAlertModalOpen(false)}
+        defaultRecipient="deepakmurugaiyan@gmail.com"
+        caseId={data?.case_id || 'CASE-PROTOTYPE'}
+      />
+
+      <DatabaseModal
+        isOpen={dbModalOpen}
+        onClose={() => setDbModalOpen(false)}
+        currentEngine={storageStatus.engine}
+        currentStatus={storageStatus.status}
+        onDatabaseChanged={() => {
+          checkHealthAndStorage();
+          loadSavedCases();
+        }}
+      />
+
+      {/* ===================================================================== */}
+      {/* 6. ACADEMIC & INSTITUTIONAL FOOTER */}
+      {/* ===================================================================== */}
+      <footer className={`border-t mt-10 py-5 transition-colors ${
+        theme === 'light' ? 'bg-[#F8FAFC] border-[#CBD5E1] text-[#475569]' : 'bg-[#0E1526] border-[#1E293B] text-[#64748B]'
+      }`}>
+        <div className="max-w-[1240px] mx-auto px-4 flex flex-col md:flex-row items-center justify-between gap-3 text-xs">
           <div>
-            <span className="font-bold text-[#202124]">Quantum Digital Signature Security Analyzer</span>
-            <span className="mx-1.5">&bull;</span>
-            <span>Simulation-Based Cybersecurity Research Prototype</span>
+            <div className={`font-semibold ${theme === 'light' ? 'text-[#0F172A]' : 'text-[#94A3B8]'}`}>
+              University Cybersecurity Research Laboratory &bull; SOC Platform
+            </div>
+            <div className={`text-[11px] mt-0.5 ${theme === 'light' ? 'text-[#475569]' : 'text-[#64748B]'}`}>
+              Quantum Digital Signature (QDS) Security Evaluation Platform &bull; Protocol Analysis &amp; Threat Detection
+            </div>
           </div>
-          <div className="font-mono text-[11px]">
-            Python &bull; Flask &bull; Qiskit &bull; NumPy &bull; TypeScript &bull; React &bull; Chart.js
+
+          <div className={`text-[11px] md:text-right font-mono ${theme === 'light' ? 'text-[#475569]' : 'text-[#64748B]'}`}>
+            <div>Engine: Qiskit Statevector Simulator &bull; Digest: SHA-256</div>
+            <div className="mt-0.5">
+              Confidential Research Prototype &bull; Local Simulated Environment
+            </div>
           </div>
         </div>
       </footer>
-
-      {/* Modals */}
-      {cbomOpen && data?.cbom && (
-        <CbomModal
-          cbom={data.cbom}
-          isOpen={cbomOpen}
-          onClose={() => setCbomOpen(false)}
-        />
-      )}
-
-      {certModalOpen && data?.cryptographic_verification?.x509_certificate && (
-        <CertificateModal
-          cert={data.cryptographic_verification.x509_certificate}
-          isOpen={certModalOpen}
-          onClose={() => setCertModalOpen(false)}
-        />
-      )}
     </div>
   );
 }

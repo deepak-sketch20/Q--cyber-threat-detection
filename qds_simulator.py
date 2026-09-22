@@ -252,9 +252,9 @@ def simulate_bell_state(
         "shots": shots,
         "qiskit_code": (
             "from qiskit import QuantumCircuit, Aer, execute\n"
-            "qc = QuantumCircuit(2, 2)\n"
-            f"{'qc.x(0)\n' if 'X to q0' in prep_steps[0] else ''}"
-            f"{'qc.x(1)\n' if any('X to q1' in s for s in prep_steps) else ''}"
+            "qc = QuantumCircuit(2, 2)\n" +
+            ("qc.x(0)\n" if 'X to q0' in prep_steps[0] else "") +
+            ("qc.x(1)\n" if any('X to q1' in s for s in prep_steps) else "") +
             "qc.h(0)\n"
             "qc.cx(0, 1)\n"
             "qc.measure([0, 1], [0, 1])\n"
