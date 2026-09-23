@@ -455,10 +455,6 @@ async function startServer() {
   app.get('/api/qds/simulate', handleSimulate);
   app.post('/api/qds/simulate', handleSimulate);
 
-  // Serve static assets from public & static folders
-  app.use('/static', express.static(path.join(process.cwd(), 'static')));
-  app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
-
   // Vite middleware for development
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({

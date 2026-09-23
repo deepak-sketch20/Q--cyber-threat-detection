@@ -12,7 +12,8 @@ import {
   Layers,
   Database,
   Sun,
-  Moon
+  Moon,
+  Menu
 } from 'lucide-react';
 import { AnalysisResponse, SecurityLog, UploadProgressState } from './types';
 import { SAMPLE_DATASETS, analyzeSecurityText, computeSha256 } from './analyzerEngine';
@@ -26,6 +27,7 @@ import { CbomModal } from './components/CbomModal';
 import { CertificateModal } from './components/CertificateModal';
 import { ExecutiveForensicAlert } from './components/ExecutiveForensicAlert';
 import { DatabaseModal } from './components/DatabaseModal';
+import { LeftSidebar, NavTabId } from './components/LeftSidebar';
 
 const MAX_UPLOAD_SIZE = 1024 * 1024 * 1024 * 1024; // 1 TB (1,099,511,627,776 bytes)
 
@@ -55,7 +57,8 @@ export default function App() {
   const [referenceHashInput, setReferenceHashInput] = useState<string>('');
   const [mode, setMode] = useState<string>('Automatic Detection');
 
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'analyzer' | 'attack-sim' | 'quantum-lab' | 'reports' | 'audit-logs'>('dashboard');
+  const [activeTab, setActiveTab] = useState<NavTabId>('dashboard');
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState<boolean>(false);
   const [history, setHistory] = useState<HistoryCase[]>([]);
   const [filesAnalyzedCount, setFilesAnalyzedCount] = useState<number>(0);
   const [storageStatus, setStorageStatus] = useState<{ status: string; engine: string; message?: string }>({
@@ -654,7 +657,19 @@ export default function App() {
         <header className={theme === 'light' ? 'bg-white border-b border-[#CBD5E1]' : 'bg-[#0E1526] border-b border-[#1E293B]'}>
           <div className="max-w-[1240px] mx-auto px-4 py-3">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2.5">
+                <button
+                  onClick={() => setMobileSidebarOpen(prev => !prev)}
+                  className={`md:hidden p-1.5 rounded border transition-colors cursor-pointer ${
+                    theme === 'light'
+                      ? 'border-[#CBD5E1] bg-white text-[#0F172A] hover:bg-[#F1F5F9]'
+                      : 'border-[#1E293B] bg-[#131B2E] text-[#F1F5F9] hover:bg-[#1E293B]'
+                  }`}
+                  aria-label="Toggle Navigation Menu"
+                  title="Toggle Navigation Menu"
+                >
+                  <Menu className="w-4 h-4" />
+                </button>
                 <div className={`w-8 h-8 rounded flex items-center justify-center shrink-0 border ${
                   theme === 'light' ? 'bg-[#E0F2FE] border-[#BAE6FD]' : 'bg-[#0284C7]/15 border-[#0284C7]/30'
                 }`}>
@@ -785,132 +800,67 @@ export default function App() {
         </header>
 
         {/* ===================================================================== */}
-        {/* 2. TOP NAVIGATION: DASHBOARD | SECURITY ANALYZER | ATTACK SIMULATION | QUANTUM SECURITY | REPORTS | AUDIT LOGS */}
+        {/* 2. APPLICATION LAYOUT: [ LEFT SIDEBAR 260px ] [ MAIN CONTENT ] */}
         {/* ===================================================================== */}
-        <nav className={`border-b sticky top-0 z-40 ${
-          theme === 'light' ? 'bg-white border-[#CBD5E1]' : 'bg-[#0E1526] border-[#1E293B]'
-        }`}>
-          <div className="max-w-[1240px] mx-auto px-4 flex items-center justify-between overflow-x-auto">
-            <div className="flex items-center gap-0.5">
-              {[
-                { id: 'dashboard', label: 'Dashboard' },
-                { id: 'analyzer', label: 'Security Analyzer' },
-                { id: 'attack-sim', label: 'Attack Simulation' },
-                { id: 'quantum-lab', label: 'Quantum Security' },
-                { id: 'reports', label: 'Reports' },
-                { id: 'audit-logs', label: 'Audit Logs' },
-              ].map((tab) => {
-                const isActive = activeTab === tab.id;
-                return (
-                  <button
-                    key={tab.id}
-                    onClick={() => setActiveTab(tab.id as any)}
-                    className={`px-3.5 py-2.5 text-xs font-medium border-b-2 transition cursor-pointer -mb-[1px] whitespace-nowrap ${
-                      isActive
-                        ? theme === 'light'
-                          ? 'border-[#0284C7] text-[#0284C7] font-bold bg-[#F1F5F9]'
-                          : 'border-[#0284C7] text-[#38BDF8] font-bold bg-[#131B2E]'
-                        : theme === 'light'
-                          ? 'border-transparent text-[#475569] hover:text-[#0F172A] hover:bg-[#F8FAFC]'
-                          : 'border-transparent text-[#94A3B8] hover:text-[#F1F5F9] hover:bg-[#131B2E]/50'
-                    }`}
-                  >
-                    {tab.label}
-                  </button>
-                );
-              })}
+        <div className="flex flex-col md:flex-row w-full flex-1">
+          {/* Left Sidebar (260px on desktop) */}
+          <LeftSidebar
+            activeTab={activeTab}
+            setActiveTab={setActiveTab}
+            theme={theme}
+            mobileOpen={mobileSidebarOpen}
+            setMobileOpen={setMobileSidebarOpen}
+            onOpenCbom={() => setCbomOpen(true)}
+            onOpenCert={() => setCertModalOpen(true)}
+            onOpenEmailAlert={() => setEmailAlertModalOpen(true)}
+          />
+
+          {/* Main Content Area (To the RIGHT of the sidebar) */}
+          <div className="flex-1 min-w-0 flex flex-col">
+            {/* 1-CLICK RESEARCH PRESETS STRIP */}
+            <div className={`border-b py-2 ${
+              theme === 'light' ? 'bg-[#F8FAFC] border-[#CBD5E1]' : 'bg-[#0B0F19] border-[#1E293B]'
+            }`}>
+              <div className="max-w-[1240px] px-4">
+                <div className="flex items-center gap-1.5 overflow-x-auto text-xs">
+                  <span className={`text-[11px] font-mono uppercase shrink-0 mr-1 ${
+                    theme === 'light' ? 'text-[#475569]' : 'text-[#64748B]'
+                  }`}>
+                    Presets:
+                  </span>
+                  {[
+                    { id: 'test_1_secure.txt', label: '1: Secure' },
+                    { id: 'test_2_replay_attack.txt', label: '2: Replay' },
+                    { id: 'test_3_forgery_attack.txt', label: '3: Forgery' },
+                    { id: 'test_4_impersonation.txt', label: '4: Impersonate' },
+                    { id: 'test_5_tampering.txt', label: '5: Tamper' },
+                    { id: 'test_6_quantum_eavesdropping.txt', label: '6: Quantum QBER' },
+                    { id: 'test_7_intercept_resend.txt', label: '7: Intercept-Resend' },
+                    { id: 'test_8_expired_cert.txt', label: '8: Expired Cert' }
+                  ].map((s) => {
+                    const isSelected = activeSampleId === s.id && !selectedFile;
+                    return (
+                      <button
+                        key={s.id}
+                        onClick={() => handleLoadSample(s.id)}
+                        className={`px-2.5 py-1 rounded text-xs whitespace-nowrap transition cursor-pointer border ${
+                          isSelected
+                            ? 'bg-[#0284C7] text-white border-[#0284C7] font-semibold shadow-xs'
+                            : theme === 'light'
+                              ? 'bg-white text-[#334155] border-[#CBD5E1] hover:bg-[#F1F5F9] hover:text-[#0F172A]'
+                              : 'bg-[#111827] text-[#94A3B8] border-[#1E293B] hover:bg-[#162032] hover:text-[#F1F5F9]'
+                        }`}
+                      >
+                        {s.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
 
-            {/* Quick Action Utilities */}
-            <div className="flex items-center gap-1.5 py-1.5 pl-2">
-              <button
-                onClick={() => setCbomOpen(true)}
-                className={`px-2.5 py-1 text-xs rounded border font-medium flex items-center gap-1.5 cursor-pointer transition ${
-                  theme === 'light'
-                    ? 'border-[#CBD5E1] bg-white hover:bg-[#F1F5F9] text-[#0F172A]'
-                    : 'border-[#1E293B] bg-[#131B2E] hover:bg-[#1E293B] text-[#E2E8F0]'
-                }`}
-                title="View CycloneDX Cryptography Bill of Materials"
-              >
-                <FileCode className={`w-3.5 h-3.5 ${theme === 'light' ? 'text-[#0284C7]' : 'text-[#38BDF8]'}`} />
-                <span className={`hidden sm:inline font-semibold ${theme === 'light' ? 'text-[#0F172A]' : 'text-[#E2E8F0]'}`}>CBOM</span>
-              </button>
-              <button
-                onClick={() => setCertModalOpen(true)}
-                className={`px-2.5 py-1 text-xs rounded border font-medium flex items-center gap-1.5 cursor-pointer transition ${
-                  theme === 'light'
-                    ? 'border-[#CBD5E1] bg-white hover:bg-[#F1F5F9] text-[#0F172A]'
-                    : 'border-[#1E293B] bg-[#131B2E] hover:bg-[#1E293B] text-[#E2E8F0]'
-                }`}
-                title="Inspect X.509 PKI Public Key Certificate"
-              >
-                <Lock className={`w-3.5 h-3.5 ${theme === 'light' ? 'text-[#059669]' : 'text-[#34D399]'}`} />
-                <span className={`hidden sm:inline font-semibold ${theme === 'light' ? 'text-[#0F172A]' : 'text-[#E2E8F0]'}`}>X.509 PKI</span>
-              </button>
-              <button
-                onClick={() => setEmailAlertModalOpen(true)}
-                className={`px-2.5 py-1 text-xs rounded border font-medium flex items-center gap-1.5 cursor-pointer transition ${
-                  theme === 'light'
-                    ? 'border-[#CBD5E1] bg-white hover:bg-[#F1F5F9] text-[#0F172A]'
-                    : 'border-[#1E293B] bg-[#131B2E] hover:bg-[#1E293B] text-[#E2E8F0]'
-                }`}
-                title="Open Executive Forensic Email Alert Modal"
-              >
-                <Mail className={`w-3.5 h-3.5 ${theme === 'light' ? 'text-[#DC2626]' : 'text-[#F87171]'}`} />
-                <span className={`hidden sm:inline font-semibold ${theme === 'light' ? 'text-[#0F172A]' : 'text-[#E2E8F0]'}`}>Alert</span>
-              </button>
-            </div>
-          </div>
-        </nav>
-
-        {/* ===================================================================== */}
-        {/* 3. 1-CLICK RESEARCH PRESETS STRIP */}
-        {/* ===================================================================== */}
-        <div className={`border-b py-2 ${
-          theme === 'light' ? 'bg-[#F8FAFC] border-[#CBD5E1]' : 'bg-[#0B0F19] border-[#1E293B]'
-        }`}>
-          <div className="max-w-[1240px] mx-auto px-4">
-            <div className="flex items-center gap-1.5 overflow-x-auto text-xs">
-              <span className={`text-[11px] font-mono uppercase shrink-0 mr-1 ${
-                theme === 'light' ? 'text-[#475569]' : 'text-[#64748B]'
-              }`}>
-                Presets:
-              </span>
-              {[
-                { id: 'test_1_secure.txt', label: '1: Secure' },
-                { id: 'test_2_replay_attack.txt', label: '2: Replay' },
-                { id: 'test_3_forgery_attack.txt', label: '3: Forgery' },
-                { id: 'test_4_impersonation.txt', label: '4: Impersonate' },
-                { id: 'test_5_tampering.txt', label: '5: Tamper' },
-                { id: 'test_6_quantum_eavesdropping.txt', label: '6: Quantum QBER' },
-                { id: 'test_7_intercept_resend.txt', label: '7: Intercept-Resend' },
-                { id: 'test_8_expired_cert.txt', label: '8: Expired Cert' }
-              ].map((s) => {
-                const isSelected = activeSampleId === s.id && !selectedFile;
-                return (
-                  <button
-                    key={s.id}
-                    onClick={() => handleLoadSample(s.id)}
-                    className={`px-2.5 py-1 rounded text-xs whitespace-nowrap transition cursor-pointer border ${
-                      isSelected
-                        ? 'bg-[#0284C7] text-white border-[#0284C7] font-semibold shadow-xs'
-                        : theme === 'light'
-                          ? 'bg-white text-[#334155] border-[#CBD5E1] hover:bg-[#F1F5F9] hover:text-[#0F172A]'
-                          : 'bg-[#111827] text-[#94A3B8] border-[#1E293B] hover:bg-[#162032] hover:text-[#F1F5F9]'
-                    }`}
-                  >
-                    {s.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-
-        {/* ===================================================================== */}
-        {/* 4. MAIN CONTENT VIEW CONTROLLER */}
-        {/* ===================================================================== */}
-        <main className="max-w-[1240px] mx-auto px-4 py-5">
+            {/* MAIN CONTENT VIEW CONTROLLER */}
+            <main className="max-w-[1240px] w-full px-4 py-5 flex-1">
           {activeTab === 'dashboard' && (
             <DashboardView
               data={data}
@@ -996,6 +946,8 @@ export default function App() {
             <AuditLogsView logs={data?.logs || []} caseId={data?.case_id} />
           )}
         </main>
+          </div>
+        </div>
       </div>
 
       {/* ===================================================================== */}
