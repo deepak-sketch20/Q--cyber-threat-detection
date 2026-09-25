@@ -18,9 +18,33 @@ import { HistoryCase } from './components/DashboardView';
 const DATA_DIR = path.join(process.cwd(), 'data');
 const LOCAL_CASES_FILE = path.join(DATA_DIR, 'cases_store.json');
 
-const SUPABASE_URL = process.env.SUPABASE_URL || '';
+export function resolveSupabaseUrl(): string {
+  const rawUrl = (process.env.SUPABASE_URL || '').trim();
+  const dbUrl = (process.env.DATABASE_URL || '').trim();
+
+  // If already a valid http(s) URL
+  if (rawUrl.startsWith('http://') || rawUrl.startsWith('https://')) {
+    return rawUrl;
+  }
+
+  // If rawUrl is a Supabase project reference ID (e.g. 20-char alphanumeric)
+  if (/^[a-z0-9]{15,30}$/i.test(rawUrl)) {
+    return `https://${rawUrl}.supabase.co`;
+  }
+
+  // If rawUrl is set to the bucket name and DATABASE_URL contains the project ref
+  if (/^[a-z0-9]{15,30}$/i.test(dbUrl)) {
+    return `https://${dbUrl}.supabase.co`;
+  }
+
+  return rawUrl;
+}
+
+const SUPABASE_URL = resolveSupabaseUrl();
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || '';
-const SUPABASE_BUCKET = process.env.SUPABASE_BUCKET || 'qsecure-files';
+const SUPABASE_BUCKET = (process.env.SUPABASE_BUCKET && !/^[a-z0-9]{20}$/i.test(process.env.SUPABASE_BUCKET))
+  ? process.env.SUPABASE_BUCKET
+  : 'qsecure-files';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'qshield_research_laboratory_jwt_secret_key_2026';
 

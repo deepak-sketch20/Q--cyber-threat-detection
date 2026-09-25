@@ -123,6 +123,22 @@ Signature Algorithm: ECDSA
 Signature Status: VALID
 Security Alert: Bit alteration detected on classical transit channel between hops 3 and 4.`
   },
+  'test_5_tampering.txt': {
+    name: 'Test 5: File & Channel Tampering',
+    tag: 'HIGH RISK',
+    content: `MESSAGE TRANSMISSION AUDIT - TAMPERED PAYLOAD
+Transaction ID: TXN-TRANS-4481
+Signer: Carol (Data Center Node 4)
+Signed By: node4@datacenter.internal
+Channel Status: TAMPERED
+Message Modification: DETECTED
+Modification Detected in transmission payload
+Hash Mismatch: TRUE
+Integrity Check: FAILED
+Signature Algorithm: ECDSA-P256-SHA256
+Signature Status: INVALID
+Security Alert: Digest mismatch detected. File payload altered in classical transmission.`
+  },
   'test_6_quantum_eavesdropping.txt': {
     name: 'Test 6: Quantum Eavesdropping',
     tag: 'CRITICAL',
@@ -156,6 +172,23 @@ Eavesdropping Indicator: DETECTED
 Security Note:
 Simulated quantum-state interaction caused a high error rate.`
   },
+  'test_7_intercept_resend.txt': {
+    name: 'Test 7: Intercept-Resend Attack',
+    tag: 'CRITICAL',
+    content: `QUANTUM OPTICAL CHANNEL TELEMETRY REPORT
+Session ID: QDS-INTERCEPT-RESEND-2026-081
+Protocol: Quantum Digital Signature (QDS) Teleportation
+Transmission: Optical Fiber Qubit Exchange
+Quantum Channel: COMPROMISED
+Eavesdropping Type: Intercept-Resend Strategy
+Detector Basis Selection: Random Conjugate Bases
+Disturbance Rate: 0.2540
+QBER: 0.2540
+Threshold: 0.1100
+Bell State Teleportation Fidelity: 0.7460
+Signature Status: INVALID
+Security Verdict: Classical-Quantum eavesdropper intercepted optical pulses and resent cloned photons, exceeding the 11% QBER threshold.`
+  },
   'test_7_multiple_threats.txt': {
     name: 'Test 7: Multi-Threat Vector',
     tag: 'CRITICAL',
@@ -178,6 +211,22 @@ Rounds: 100
 Matches: 58
 Mismatches: 42
 Eavesdropping Indicator: DETECTED`
+  },
+  'test_8_expired_cert.txt': {
+    name: 'Test 8: Expired Certificate Attack',
+    tag: 'HIGH RISK',
+    content: `X.509 DIGITAL CERTIFICATE & SIGNATURE MANIFEST
+Transaction ID: TXN-CERT-EXPIRED-9941
+Signer: Mallory (Compromised Corporate CA)
+Signed By: mallory@revoked-ca.internal
+Signature Algorithm: RSA-2048-PKCS1
+Signature Status: INVALID
+Certificate Status: EXPIRED
+Certificate Validity: NotAfter: 2024-01-01T00:00:00Z
+Current Audit Date: 2026-09-23T00:00:00Z
+Certificate Trust Path: ROOT-CA -> SUB-CA-01 (EXPIRED) -> LEAF
+Authentication: FAILED
+Security Alert: The public key certificate used to verify this digital signature expired 996 days ago. Cryptographic trust validation failed.`
   },
   'test_8_dilithium_pqc.txt': {
     name: 'Test 8: CRYSTALS-Dilithium PQC (PASS)',

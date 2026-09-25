@@ -15,11 +15,12 @@ import {
   Moon,
   Menu
 } from 'lucide-react';
-import { AnalysisResponse, SecurityLog, UploadProgressState } from './types';
+import { AnalysisResponse, SecurityLog, UploadProgressState, QdsPackage, QdsVerificationResult } from './types';
 import { SAMPLE_DATASETS, analyzeSecurityText, computeSha256 } from './analyzerEngine';
 import { DashboardView, HistoryCase } from './components/DashboardView';
 import { AnalyzerView } from './components/AnalyzerView';
 import { AttackSimulationView } from './components/AttackSimulationView';
+import { QdsSigningEngineView } from './components/QdsSigningEngineView';
 import { ReportView } from './components/ReportView';
 import { AuditLogsView } from './components/AuditLogsView';
 import { QuantumSecurityLab } from './components/QuantumSecurityLab';
@@ -28,6 +29,8 @@ import { CertificateModal } from './components/CertificateModal';
 import { ExecutiveForensicAlert } from './components/ExecutiveForensicAlert';
 import { DatabaseModal } from './components/DatabaseModal';
 import { LeftSidebar, NavTabId } from './components/LeftSidebar';
+import { verifyQdsPackage } from './qdsVerificationEngine';
+import { createQdsPackage, QDS_PRESET_TEMPLATES } from './qdsPackageEngine';
 
 const MAX_UPLOAD_SIZE = 1024 * 1024 * 1024 * 1024; // 1 TB (1,099,511,627,776 bytes)
 
@@ -65,6 +68,21 @@ export default function App() {
     status: 'active',
     engine: 'Persistent Storage'
   });
+
+  // QDS Security Package & Central Verification Engine State
+  const [currentPackage, setCurrentPackage] = useState<QdsPackage | null>(null);
+  const [qdsVerificationResult, setQdsVerificationResult] = useState<QdsVerificationResult | null>(null);
+
+  // Initialize a baseline clean QDS Package on mount
+  useEffect(() => {
+    createQdsPackage({
+      filename: QDS_PRESET_TEMPLATES[0].filename,
+      content: QDS_PRESET_TEMPLATES[0].content,
+      algorithm: 'ML-DSA-65 (Dilithium3)'
+    }).then(pkg => {
+      setCurrentPackage(pkg);
+    });
+  }, []);
 
   // Theme state: default to 'light' per user request, allow toggling
   const [theme, setTheme] = useState<'dark' | 'light'>('light');
@@ -337,6 +355,53 @@ export default function App() {
       analysisStatus: 'error',
       error: 'Upload was cancelled by user.'
     } : null);
+  };
+
+  // QDS Platform Handlers: Central Verification, Package Signing, Attack Lab
+  const handleVerifyPackage = async (pkg: QdsPackage) => {
+    setLoading(true);
+    setAnalysisState('running');
+    setCurrentOperation('Executing Central Verification Engine (8-Layer Pipeline)...');
+    setCurrentStepIndex(1);
+
+    const verificationResult = await verifyQdsPackage(pkg);
+    setQdsVerificationResult(verificationResult);
+    setData(verificationResult.threat_analysis);
+    setLoading(false);
+    setAnalysisState('completed');
+    setCurrentOperation('Completed');
+    setCurrentStepIndex(7);
+
+    const riskScore = verificationResult.risk_score;
+    const isThreat = verificationResult.overall_decision === 'COMPROMISED';
+    const isSusp = verificationResult.overall_decision === 'WARNING';
+    const statusStr = isThreat ? 'COMPROMISED' : isSusp ? 'SUSPICIOUS' : 'SECURE';
+
+    const historyEntry: HistoryCase = {
+      case_id: verificationResult.threat_analysis.case_id || pkg.package_id,
+      file_name: pkg.original_artifact.filename,
+      timestamp: verificationResult.verified_at,
+      risk_score: riskScore,
+      status: statusStr,
+      threats_count: verificationResult.failed_count,
+      primary_threat: verificationResult.threat_analysis.summary.primary_threat,
+      data: verificationResult.threat_analysis
+    };
+
+    setHistory(prev => [historyEntry, ...prev.filter(h => h.case_id !== historyEntry.case_id)].slice(0, 50));
+    setFilesAnalyzedCount(prev => prev + 1);
+
+    setActiveTab('analyzer');
+  };
+
+  const handlePackageGenerated = (pkg: QdsPackage) => {
+    setCurrentPackage(pkg);
+    setQdsVerificationResult(null);
+  };
+
+  const handleSendToAttackLab = (pkg: QdsPackage) => {
+    setCurrentPackage(pkg);
+    setActiveTab('attack-sim');
   };
 
   const handleLoadSample = async (sampleId: string, currentMode = mode, refHash = referenceHashInput) => {
@@ -649,14 +714,14 @@ export default function App() {
   };
 
   return (
-    <div className={`min-h-screen ${theme === 'light' ? 'bg-[#F8FAFC] text-[#0F172A]' : 'bg-[#0B0F19] text-[#F1F5F9]'} flex flex-col justify-between font-sans transition-colors duration-150`}>
-      <div>
+    <div className={`min-h-screen w-full ${theme === 'light' ? 'bg-[#F8FAFC] text-[#0F172A]' : 'bg-[#0B0F19] text-[#F1F5F9]'} flex flex-col justify-between font-sans transition-colors duration-150 overflow-x-hidden`}>
+      <div className="w-full flex-1 flex flex-col">
         {/* ===================================================================== */}
-        {/* 1. APPLICATION SHELL: HEADER */}
+        {/* 1. APPLICATION SHELL: HEADER (Full Viewport Width) */}
         {/* ===================================================================== */}
-        <header className={theme === 'light' ? 'bg-white border-b border-[#CBD5E1]' : 'bg-[#0E1526] border-b border-[#1E293B]'}>
-          <div className="max-w-[1240px] mx-auto px-4 py-3">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+        <header className={`w-full ${theme === 'light' ? 'bg-white border-b border-[#CBD5E1]' : 'bg-[#0E1526] border-b border-[#1E293B]'}`}>
+          <div className="w-full px-4 sm:px-6 py-2.5">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
               <div className="flex items-center gap-2.5">
                 <button
                   onClick={() => setMobileSidebarOpen(prev => !prev)}
@@ -783,18 +848,21 @@ export default function App() {
             </div>
 
             {/* Technical Sub-Header Strip */}
-            <div className={`mt-2.5 pt-2 border-t text-[11px] font-mono flex flex-wrap items-center gap-x-3 gap-y-1 ${
+            <div className={`mt-2.5 pt-2 border-t text-[11px] font-mono flex flex-wrap items-center justify-between gap-x-3 gap-y-1 ${
               theme === 'light' ? 'border-[#E2E8F0] text-[#475569]' : 'border-[#1E293B] text-[#64748B]'
             }`}>
-              <span>Prototype Version: 1.0</span>
-              <span>&bull;</span>
-              <span>Simulation Engine: Qiskit Aer</span>
-              <span>&bull;</span>
-              <span>Hash Algorithm: SHA-256</span>
-              <span>&bull;</span>
-              <span>Analysis Mode: <span className={theme === 'light' ? 'text-[#0F172A] font-semibold' : 'text-[#94A3B8]'}>{mode}</span></span>
-              <span>&bull;</span>
-              <span>Quantum Backend: Statevector Simulator</span>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                <span>Prototype Version: <strong>1.0</strong></span>
+                <span>&bull;</span>
+                <span>Simulation Engine: <strong>Qiskit Aer</strong></span>
+                <span>&bull;</span>
+                <span>Hash Algorithm: <strong>SHA-256</strong></span>
+                <span>&bull;</span>
+                <span>Quantum Backend: <strong>Statevector Simulator</strong></span>
+              </div>
+              <div className="flex items-center gap-3">
+                <span>Mode: <strong className={theme === 'light' ? 'text-[#0284C7]' : 'text-[#38BDF8]'}>{mode}</strong></span>
+              </div>
             </div>
           </div>
         </header>
@@ -815,52 +883,10 @@ export default function App() {
             onOpenEmailAlert={() => setEmailAlertModalOpen(true)}
           />
 
-          {/* Main Content Area (To the RIGHT of the sidebar) */}
-          <div className="flex-1 min-w-0 flex flex-col">
-            {/* 1-CLICK RESEARCH PRESETS STRIP */}
-            <div className={`border-b py-2 ${
-              theme === 'light' ? 'bg-[#F8FAFC] border-[#CBD5E1]' : 'bg-[#0B0F19] border-[#1E293B]'
-            }`}>
-              <div className="max-w-[1240px] px-4">
-                <div className="flex items-center gap-1.5 overflow-x-auto text-xs">
-                  <span className={`text-[11px] font-mono uppercase shrink-0 mr-1 ${
-                    theme === 'light' ? 'text-[#475569]' : 'text-[#64748B]'
-                  }`}>
-                    Presets:
-                  </span>
-                  {[
-                    { id: 'test_1_secure.txt', label: '1: Secure' },
-                    { id: 'test_2_replay_attack.txt', label: '2: Replay' },
-                    { id: 'test_3_forgery_attack.txt', label: '3: Forgery' },
-                    { id: 'test_4_impersonation.txt', label: '4: Impersonate' },
-                    { id: 'test_5_tampering.txt', label: '5: Tamper' },
-                    { id: 'test_6_quantum_eavesdropping.txt', label: '6: Quantum QBER' },
-                    { id: 'test_7_intercept_resend.txt', label: '7: Intercept-Resend' },
-                    { id: 'test_8_expired_cert.txt', label: '8: Expired Cert' }
-                  ].map((s) => {
-                    const isSelected = activeSampleId === s.id && !selectedFile;
-                    return (
-                      <button
-                        key={s.id}
-                        onClick={() => handleLoadSample(s.id)}
-                        className={`px-2.5 py-1 rounded text-xs whitespace-nowrap transition cursor-pointer border ${
-                          isSelected
-                            ? 'bg-[#0284C7] text-white border-[#0284C7] font-semibold shadow-xs'
-                            : theme === 'light'
-                              ? 'bg-white text-[#334155] border-[#CBD5E1] hover:bg-[#F1F5F9] hover:text-[#0F172A]'
-                              : 'bg-[#111827] text-[#94A3B8] border-[#1E293B] hover:bg-[#162032] hover:text-[#F1F5F9]'
-                        }`}
-                      >
-                        {s.label}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-
+          {/* Main Content Area (To the RIGHT of the sidebar, full available width) */}
+          <div className="flex-1 min-w-0 flex flex-col w-full">
             {/* MAIN CONTENT VIEW CONTROLLER */}
-            <main className="max-w-[1240px] w-full px-4 py-5 flex-1">
+            <main className="w-full px-4 sm:px-6 py-4 flex-1">
           {activeTab === 'dashboard' && (
             <DashboardView
               data={data}
@@ -892,6 +918,19 @@ export default function App() {
                 setErrorMessage(null);
                 setErrorDetails(null);
               }}
+              onNavigateToSigning={() => setActiveTab('qds-signing')}
+              onNavigateToAttackLab={() => setActiveTab('attack-sim')}
+              activeQdsPackage={currentPackage}
+              qdsVerificationResult={qdsVerificationResult}
+            />
+          )}
+
+          {activeTab === 'qds-signing' && (
+            <QdsSigningEngineView
+              onPackageGenerated={handlePackageGenerated}
+              onSendToVerify={handleVerifyPackage}
+              onSendToAttackLab={handleSendToAttackLab}
+              theme={theme}
             />
           )}
 
@@ -922,11 +961,19 @@ export default function App() {
               onDismissError={() => setErrorMessage(null)}
               onOpenCertModal={() => setCertModalOpen(true)}
               onOpenCbomModal={() => setCbomOpen(true)}
+              qdsVerificationResult={qdsVerificationResult}
+              activeQdsPackage={currentPackage}
+              onNavigateToSigning={() => setActiveTab('qds-signing')}
+              onNavigateToAttackLab={() => setActiveTab('attack-sim')}
+              theme={theme}
             />
           )}
 
           {activeTab === 'attack-sim' && (
             <AttackSimulationView
+              currentPackage={currentPackage}
+              onVerifyPackage={handleVerifyPackage}
+              theme={theme}
               onLoadAndAnalyze={(sampleId) => {
                 handleLoadSample(sampleId);
                 setActiveTab('analyzer');
@@ -989,10 +1036,10 @@ export default function App() {
       {/* ===================================================================== */}
       {/* 6. ACADEMIC & INSTITUTIONAL FOOTER */}
       {/* ===================================================================== */}
-      <footer className={`border-t mt-10 py-5 transition-colors ${
+      <footer className={`border-t mt-6 py-3.5 transition-colors ${
         theme === 'light' ? 'bg-[#F8FAFC] border-[#CBD5E1] text-[#475569]' : 'bg-[#0E1526] border-[#1E293B] text-[#64748B]'
       }`}>
-        <div className="max-w-[1240px] mx-auto px-4 flex flex-col md:flex-row items-center justify-between gap-3 text-xs">
+        <div className="w-full px-4 sm:px-6 flex flex-col md:flex-row items-center justify-between gap-3 text-xs">
           <div>
             <div className={`font-semibold ${theme === 'light' ? 'text-[#0F172A]' : 'text-[#94A3B8]'}`}>
               University Cybersecurity Research Laboratory &bull; SOC Platform

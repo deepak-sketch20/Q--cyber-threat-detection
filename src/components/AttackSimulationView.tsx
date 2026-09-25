@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   ShieldAlert,
   ShieldCheck,
@@ -12,12 +12,29 @@ import {
   Activity,
   CheckCircle2,
   XCircle,
-  Cpu
+  Cpu,
+  Zap,
+  Copy,
+  RefreshCw,
+  GitCompare,
+  ArrowDown
 } from 'lucide-react';
-import { SAMPLE_DATASETS } from '../analyzerEngine';
+import { QdsPackage } from '../types';
+import {
+  QDS_ATTACK_VECTORS,
+  QdsAttackVectorId,
+  cloneAndAttackPackage,
+  computePackageDiff,
+  PackageDiffItem,
+  createQdsPackage,
+  QDS_PRESET_TEMPLATES
+} from '../qdsPackageEngine';
 
 interface AttackSimulationViewProps {
   onLoadAndAnalyze: (sampleId: string) => void;
+  currentPackage?: QdsPackage | null;
+  onVerifyPackage?: (pkg: QdsPackage) => void;
+  theme?: 'dark' | 'light';
 }
 
 interface AttackScenario {
@@ -180,9 +197,46 @@ const ATTACK_SCENARIOS: AttackScenario[] = [
   }
 ];
 
-export const AttackSimulationView: React.FC<AttackSimulationViewProps> = ({ onLoadAndAnalyze }) => {
+export const AttackSimulationView: React.FC<AttackSimulationViewProps> = ({
+  onLoadAndAnalyze,
+  currentPackage,
+  onVerifyPackage,
+  theme = 'light'
+}) => {
+  const [activePackage, setActivePackage] = useState<QdsPackage | null>(currentPackage || null);
+  const [selectedVector, setSelectedVector] = useState<QdsAttackVectorId>('PAYLOAD_TAMPERING');
+  const [attackedCopy, setAttackedCopy] = useState<QdsPackage | null>(null);
+  const [diffItems, setDiffItems] = useState<PackageDiffItem[]>([]);
+  const [activeViewTab, setActiveViewTab] = useState<'qds-lab' | 'scenarios'>('qds-lab');
+
+  // Scenario filters
   const [selectedCategory, setSelectedCategory] = useState<'ALL' | 'Classical Cryptography' | 'Protocol & State' | 'Quantum Channel'>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
+
+  // If no package currently loaded, instantiate a baseline default package
+  useEffect(() => {
+    if (currentPackage) {
+      setActivePackage(currentPackage);
+    } else if (!activePackage) {
+      createQdsPackage({
+        filename: QDS_PRESET_TEMPLATES[0].filename,
+        content: QDS_PRESET_TEMPLATES[0].content,
+        algorithm: 'ML-DSA-65 (Dilithium3)'
+      }).then(pkg => {
+        setActivePackage(pkg);
+      });
+    }
+  }, [currentPackage]);
+
+  const handleLaunchAttack = (vectorId: QdsAttackVectorId) => {
+    if (!activePackage) return;
+    setSelectedVector(vectorId);
+    // Deep clone and attack only the copy! Original package is completely preserved.
+    const attacked = cloneAndAttackPackage(activePackage, vectorId);
+    setAttackedCopy(attacked);
+    const diff = computePackageDiff(activePackage, attacked);
+    setDiffItems(diff);
+  };
 
   const filteredScenarios = ATTACK_SCENARIOS.filter(scenario => {
     const matchesCategory = selectedCategory === 'ALL' || scenario.category === selectedCategory;
@@ -195,155 +249,474 @@ export const AttackSimulationView: React.FC<AttackSimulationViewProps> = ({ onLo
 
   return (
     <div className="space-y-4">
-      {/* View Header */}
-      <div className="bg-[#111827] border border-[#1E293B] rounded p-4 flex flex-col md:flex-row md:items-center justify-between gap-3">
+      {/* View Header with Pipeline Indicator */}
+      <div className={`p-4 rounded-lg border flex flex-col md:flex-row md:items-center justify-between gap-3 ${
+        theme === 'light'
+          ? 'bg-gradient-to-r from-amber-50 via-orange-50 to-red-50 border-amber-200'
+          : 'bg-[#111827] border-[#1E293B]'
+      }`}>
         <div>
           <div className="flex items-center gap-2">
-            <h2 className="text-xs font-bold uppercase tracking-wider text-[#F1F5F9]">
-              Cyberattack Simulation Laboratory
-            </h2>
-            <span className="text-[10px] font-mono px-2 py-0.5 rounded border border-[#1E293B] bg-[#162032] text-[#94A3B8]">
-              8 Research Scenarios
+            <span className={`text-xs font-bold uppercase tracking-wider ${theme === 'light' ? 'text-amber-900' : 'text-amber-400'}`}>
+              Q-SHIELD Architectural Pipeline
+            </span>
+            <span className="text-[10px] font-mono px-2 py-0.5 rounded border border-amber-400/30 bg-amber-500/10 text-amber-600 dark:text-amber-300 font-semibold">
+              STAGE 2: ISOLATED ATTACK SIMULATION LAB
             </span>
           </div>
-          <p className="text-[11px] text-[#94A3B8] mt-1 max-w-3xl">
-            Simulate and evaluate cryptographic, protocol-level, and quantum-channel attacks against Digital Signatures.
-            Click &quot;Simulate &amp; Analyze&quot; to ingest each artifact directly into the Security Analyzer.
+          <h2 className={`text-base font-bold mt-1 ${theme === 'light' ? 'text-gray-900' : 'text-white'}`}>
+            Security Package Attack &amp; Mutation Laboratory
+          </h2>
+          <p className={`text-xs mt-0.5 max-w-3xl ${theme === 'light' ? 'text-gray-600' : 'text-gray-400'}`}>
+            <strong className="text-amber-600 dark:text-amber-400">Strict Artifact Isolation: </strong>
+            The original <span className="font-mono font-semibold">.QDS</span> package remains 100% immutable and preserved.
+            Adversarial vectors are applied exclusively to an isolated copy (<span className="font-mono text-red-500 font-semibold">Attacked_Copy.qds</span>) for forensic evaluation in the Central Verification Engine.
           </p>
         </div>
 
-        <div className="text-right text-[11px] font-mono text-[#94A3B8] shrink-0">
-          <div>Standards: NIST SP 800 / BB84</div>
-          <div className="mt-0.5 text-[#34D399] font-semibold">Engine: Aer Simulator Ready</div>
+        {/* View Mode Toggle */}
+        <div className="flex items-center gap-1.5 p-1 rounded-md border bg-black/5 dark:bg-white/5 border-gray-200 dark:border-[#1E293B] shrink-0">
+          <button
+            onClick={() => setActiveViewTab('qds-lab')}
+            className={`px-3 py-1.5 rounded text-xs font-semibold cursor-pointer transition flex items-center gap-1.5 ${
+              activeViewTab === 'qds-lab'
+                ? 'bg-amber-600 text-white shadow-xs'
+                : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+            }`}
+          >
+            <Zap className="w-3.5 h-3.5" />
+            <span>.QDS Package Attack Lab</span>
+          </button>
+          <button
+            onClick={() => setActiveViewTab('scenarios')}
+            className={`px-3 py-1.5 rounded text-xs font-semibold cursor-pointer transition flex items-center gap-1.5 ${
+              activeViewTab === 'scenarios'
+                ? 'bg-amber-600 text-white shadow-xs'
+                : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+            }`}
+          >
+            <Layers className="w-3.5 h-3.5" />
+            <span>Research Threat Matrix (8)</span>
+          </button>
         </div>
       </div>
 
-      {/* Filter and Search Bar */}
-      <div className="bg-[#111827] border border-[#1E293B] rounded p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="flex items-center gap-1.5 text-xs flex-wrap">
-          <span className="text-[11px] font-semibold text-[#94A3B8] mr-1">Attack Category:</span>
-          {(['ALL', 'Classical Cryptography', 'Protocol & State', 'Quantum Channel'] as const).map(cat => (
-            <button
-              key={cat}
-              onClick={() => setSelectedCategory(cat)}
-              className={`px-2.5 py-1 rounded text-xs font-medium border cursor-pointer transition ${
-                selectedCategory === cat
-                  ? 'bg-[#0284C7] text-white border-[#0284C7] font-semibold'
-                  : 'bg-[#162032] text-[#94A3B8] border-[#1E293B] hover:text-[#F1F5F9] hover:bg-[#1E293B]'
-              }`}
-            >
-              {cat}
-            </button>
-          ))}
-        </div>
-
-        <div className="w-full sm:w-64">
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search scenario or standard..."
-            className="w-full px-2.5 py-1 bg-[#162032] border border-[#1E293B] rounded text-xs text-[#F1F5F9] placeholder-[#64748B] focus:outline-hidden focus:border-[#0284C7]"
-          />
-        </div>
-      </div>
-
-      {/* Scenarios Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-        {filteredScenarios.map((scenario) => {
-          const isControl = scenario.id === 'baseline-secure';
-
-          return (
-            <div
-              key={scenario.id}
-              className={`bg-[#111827] border rounded p-4 flex flex-col justify-between space-y-3 transition hover:border-[#0284C7] ${
-                isControl ? 'border-[#065F46]' : 'border-[#1E293B]'
-              }`}
-            >
-              <div className="space-y-2">
-                {/* Header */}
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <span className="text-[10px] font-mono uppercase text-[#94A3B8] block">
-                      {scenario.category}
+      {/* TAB 1: .QDS PACKAGE ISOLATED ATTACK LAB */}
+      {activeViewTab === 'qds-lab' && (
+        <div className="space-y-4">
+          {/* Active Package Banner */}
+          {activePackage && (
+            <div className={`p-3 rounded-lg border flex flex-col sm:flex-row sm:items-center justify-between gap-2 ${
+              theme === 'light' ? 'bg-white border-blue-200' : 'bg-[#111827] border-[#1E293B]'
+            }`}>
+              <div className="flex items-center gap-2.5">
+                <div className="w-7 h-7 rounded bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center border border-blue-500/20 shrink-0">
+                  <FileCode className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="text-xs font-bold flex items-center gap-1.5">
+                    <span>Base Security Artifact:</span>
+                    <span className="font-mono text-blue-600 dark:text-blue-400">
+                      {activePackage.original_artifact.filename} ({activePackage.package_id})
                     </span>
-                    <h3 className="text-sm font-bold text-[#F1F5F9] mt-0.5">
-                      {scenario.title}
-                    </h3>
+                    <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-green-500/10 text-green-600 dark:text-green-400 border border-green-500/20 font-semibold">
+                      PRESERVED / UNTOUCHED
+                    </span>
                   </div>
-
-                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold font-mono border uppercase shrink-0 ${
-                    isControl
-                      ? 'bg-[#064E3B]/40 text-[#34D399] border-[#065F46]'
-                      : scenario.severity === 'Critical'
-                      ? 'bg-[#7F1D1D]/40 text-[#F87171] border-[#991B1B]'
-                      : 'bg-[#78350F]/40 text-[#FBBF24] border-[#92400E]'
-                  }`}>
-                    {isControl ? 'CONTROL' : `${scenario.severity} RISK`}
-                  </span>
-                </div>
-
-                {/* Threat Vector and Standards */}
-                <div className="text-[11px] space-y-0.5 font-mono">
-                  <div className="text-[#F1F5F9]">
-                    <span className="text-[#94A3B8] font-sans">Vector:</span> {scenario.vector}
-                  </div>
-                  <div className="text-[#94A3B8]">
-                    <span className="text-[#94A3B8] font-sans">Standard:</span> {scenario.standardsReference}
+                  <div className="text-[10px] text-gray-500 font-mono mt-0.5">
+                    Algorithm: {activePackage.cryptography.signature_algorithm} · Signer: {activePackage.signer.identity} · SHA-256: {activePackage.cryptography.sha256.slice(0, 16)}...
                   </div>
                 </div>
-
-                {/* Mechanism Description */}
-                <p className="text-xs text-[#94A3B8] leading-relaxed font-sans">
-                  {scenario.mechanism}
-                </p>
-
-                {/* Expected Indicators */}
-                <div className="bg-[#162032] rounded p-2.5 border border-[#1E293B] space-y-1">
-                  <span className="text-[10px] font-bold uppercase text-[#94A3B8] block font-sans">
-                    Forensic Indicators to Observe:
-                  </span>
-                  <ul className="text-[11px] text-[#F1F5F9] space-y-0.5 font-mono">
-                    {scenario.expectedIndicators.map((ind, i) => (
-                      <li key={i} className="flex items-start gap-1.5">
-                        <span className={isControl ? 'text-[#34D399]' : 'text-[#F87171]'}>&bull;</span>
-                        <span className="leading-tight">{ind}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-
-                {/* Snippet Preview */}
-                <pre className="p-2 bg-[#0B0F17] text-[#94A3B8] border border-[#1E293B] rounded text-[10px] font-mono overflow-x-auto whitespace-pre leading-tight">
-                  {scenario.samplePreviewSnippet}
-                </pre>
               </div>
 
-              {/* Action Button */}
-              <div className="pt-2 border-t border-[#1E293B]">
+              {onVerifyPackage && (
                 <button
-                  onClick={() => onLoadAndAnalyze(scenario.sampleId)}
-                  className={`w-full py-1.5 px-3 rounded text-xs font-mono font-semibold flex items-center justify-center gap-2 cursor-pointer border transition ${
-                    isControl
-                      ? 'bg-[#064E3B]/30 hover:bg-[#064E3B]/60 text-[#34D399] border-[#065F46]'
-                      : 'bg-[#0284C7]/15 hover:bg-[#0284C7] text-[#38BDF8] hover:text-white border-[#0284C7]/50 hover:border-[#0284C7]'
+                  onClick={() => onVerifyPackage(activePackage)}
+                  className={`px-3 py-1.5 rounded text-xs font-semibold flex items-center gap-1.5 border transition cursor-pointer shrink-0 ${
+                    theme === 'light'
+                      ? 'border-gray-300 bg-gray-50 hover:bg-gray-100 text-gray-700'
+                      : 'border-[#1E293B] bg-[#162032] hover:bg-[#1E293B] text-gray-200'
+                  }`}
+                  title="Verify original clean package"
+                >
+                  <ShieldCheck className="w-3.5 h-3.5 text-green-500" />
+                  <span>Verify Untouched Original</span>
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Attack Vector Selector Grid */}
+          <div className={`p-4 rounded-lg border space-y-3 ${
+            theme === 'light' ? 'bg-white border-gray-200' : 'bg-[#111827] border-[#1E293B]'
+          }`}>
+            <div className="flex items-center justify-between">
+              <label className={`text-xs font-bold uppercase tracking-wider ${
+                theme === 'light' ? 'text-gray-700' : 'text-gray-300'
+              }`}>
+                Select Adversarial Attack Vector
+              </label>
+              <span className="text-[10px] font-mono text-gray-500">
+                Creates an isolated copy: Original.qds &rarr; Attacked_Copy.qds
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5">
+              {QDS_ATTACK_VECTORS.map(v => (
+                <button
+                  key={v.id}
+                  onClick={() => handleLaunchAttack(v.id)}
+                  className={`p-3 rounded-lg border text-left transition cursor-pointer flex flex-col justify-between group ${
+                    selectedVector === v.id && attackedCopy
+                      ? theme === 'light'
+                        ? 'border-red-500 bg-red-50/70 shadow-xs ring-1 ring-red-400'
+                        : 'border-red-500 bg-red-500/10 shadow-xs ring-1 ring-red-400'
+                      : theme === 'light'
+                        ? 'border-gray-200 bg-gray-50/50 hover:bg-gray-100/70'
+                        : 'border-[#1E293B] bg-[#162032] hover:bg-[#1E293B]'
                   }`}
                 >
-                  <Activity className="w-3.5 h-3.5 shrink-0" />
-                  <span>Execute Vector Simulation</span>
-                  <ArrowRight className="w-3.5 h-3.5 shrink-0" />
-                </button>
-              </div>
-            </div>
-          );
-        })}
-      </div>
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded font-bold uppercase ${
+                        v.severity === 'Critical'
+                          ? 'bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20'
+                          : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20'
+                      }`}>
+                        {v.severity}
+                      </span>
+                      <span className="text-[10px] text-gray-500 font-mono">{v.category}</span>
+                    </div>
+                    <div className={`text-xs font-bold leading-snug ${
+                      selectedVector === v.id && attackedCopy ? 'text-red-600 dark:text-red-400' : ''
+                    }`}>
+                      {v.title}
+                    </div>
+                    <div className="text-[11px] text-gray-500 mt-1 line-clamp-2 leading-relaxed">
+                      {v.mechanism}
+                    </div>
+                  </div>
 
-      {/* Laboratory Simulation Disclaimer */}
-      <div className="p-3 bg-[#111827] border border-[#1E293B] rounded text-[11px] text-[#94A3B8] font-mono flex flex-col sm:flex-row sm:items-center justify-between gap-1">
-        <span>* Research Prototype Note: Simulation cases execute local cryptographic algorithms and Aer quantum statevector models.</span>
-        <span className="shrink-0 text-[#64748B]">Environment: Qiskit Aer &bull; Bell State Φ+</span>
-      </div>
+                  <div className="mt-3 pt-2 border-t border-black/5 dark:border-white/5 flex items-center justify-between text-[10px] font-mono">
+                    <span className="text-gray-500">{v.standardsReference}</span>
+                    <span className="font-semibold text-amber-600 dark:text-amber-400 group-hover:underline flex items-center gap-1">
+                      <span>Simulate</span>
+                      <ArrowRight className="w-3 h-3" />
+                    </span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* SIDE-BY-SIDE ARTIFACT COMPARISON (ORIGINAL VS ATTACKED COPY) */}
+          {attackedCopy && activePackage && (
+            <div className={`p-4 rounded-lg border space-y-4 animate-in fade-in duration-300 ${
+              theme === 'light' ? 'bg-white border-red-300 shadow-md' : 'bg-[#0E1526] border-red-500/40 shadow-lg'
+            }`}>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-gray-200 dark:border-[#1E293B]">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className={`text-sm font-bold ${theme === 'light' ? 'text-gray-900' : 'text-white'}`}>
+                      Artifact Isolation &amp; Tamper Verification View
+                    </h3>
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-red-500/10 border border-red-500/30 text-red-600 dark:text-red-400 font-semibold">
+                      ATTACK STATE GENERATED
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-gray-500 font-mono mt-0.5">
+                    Vector: {attackedCopy.metadata.attack_applied?.title} · Isolated Copy ID: {attackedCopy.package_id}
+                  </div>
+                </div>
+
+                {onVerifyPackage && (
+                  <button
+                    onClick={() => onVerifyPackage(attackedCopy)}
+                    className="px-4 py-2 rounded bg-red-600 hover:bg-red-700 text-white text-xs font-bold uppercase tracking-wider flex items-center gap-2 cursor-pointer shadow-sm transition"
+                  >
+                    <Play className="w-4 h-4" />
+                    <span>Run Central Verification Engine on Attacked Copy</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Side-by-Side Dual Artifact Display */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {/* 1. ORIGINAL UNTOUCHED ARTIFACT */}
+                <div className={`p-3.5 rounded-lg border space-y-2.5 ${
+                  theme === 'light' ? 'bg-emerald-50/40 border-emerald-300' : 'bg-[#09151A] border-emerald-500/30'
+                }`}>
+                  <div className="flex items-center justify-between pb-2 border-b border-emerald-200 dark:border-emerald-500/20">
+                    <div className="flex items-center gap-2">
+                      <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                      <span className="text-xs font-bold text-emerald-700 dark:text-emerald-300 uppercase tracking-wider">
+                        Original Artifact (Untouched)
+                      </span>
+                    </div>
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-semibold">
+                      IMMUTABLE BASELINE
+                    </span>
+                  </div>
+
+                  <div className="space-y-1.5 text-xs font-mono">
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">Package ID:</span>
+                      <span className="font-semibold">{activePackage.package_id}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">SHA-256 Digest:</span>
+                      <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                        {activePackage.cryptography.sha256.slice(0, 18)}...
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">Algorithm:</span>
+                      <span>{activePackage.cryptography.signature_algorithm}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">Signer Identity:</span>
+                      <span className="font-semibold">{activePackage.signer.identity}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">Nonce:</span>
+                      <span>{activePackage.cryptography.nonce.slice(0, 16)}...</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">Observed QBER:</span>
+                      <span className="text-emerald-600 dark:text-emerald-400 font-semibold">
+                        {activePackage.quantum_evidence.observed_qber.toFixed(2)}% (Optimal)
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Content Preview */}
+                  <div className="pt-2">
+                    <div className="text-[10px] font-mono uppercase text-gray-500 font-semibold mb-1">
+                      Original Content Snippet:
+                    </div>
+                    <pre className={`p-2 rounded border text-[10px] font-mono max-h-24 overflow-y-auto leading-relaxed ${
+                      theme === 'light' ? 'bg-white border-emerald-200 text-gray-800' : 'bg-black/40 border-[#1E293B] text-gray-300'
+                    }`}>
+                      {activePackage.original_artifact.raw_content.slice(0, 200)}...
+                    </pre>
+                  </div>
+                </div>
+
+                {/* 2. ATTACKED COPY (ADVERSARIALLY MUTATED) */}
+                <div className={`p-3.5 rounded-lg border space-y-2.5 ${
+                  theme === 'light' ? 'bg-red-50/40 border-red-300' : 'bg-[#1C0D15] border-red-500/30'
+                }`}>
+                  <div className="flex items-center justify-between pb-2 border-b border-red-200 dark:border-red-500/20">
+                    <div className="flex items-center gap-2">
+                      <ShieldAlert className="w-4 h-4 text-red-600 dark:text-red-400" />
+                      <span className="text-xs font-bold text-red-700 dark:text-red-300 uppercase tracking-wider">
+                        Attacked Copy (Adversarial State)
+                      </span>
+                    </div>
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-red-500/10 text-red-600 dark:text-red-400 font-semibold">
+                      ISOLATED MUTATION
+                    </span>
+                  </div>
+
+                  <div className="space-y-1.5 text-xs font-mono">
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">Package ID:</span>
+                      <span className="font-semibold text-red-600 dark:text-red-400">{attackedCopy.package_id}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">SHA-256 Manifest:</span>
+                      <span>{attackedCopy.cryptography.sha256.slice(0, 18)}...</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">Algorithm:</span>
+                      <span className={attackedCopy.cryptography.signature_type === 'CLASSICAL' && activePackage.cryptography.signature_type === 'POST_QUANTUM' ? 'text-red-500 font-bold' : ''}>
+                        {attackedCopy.cryptography.signature_algorithm}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">Signer Identity:</span>
+                      <span className={attackedCopy.signer.trust_status === 'UNTRUSTED' ? 'text-red-500 font-bold' : ''}>
+                        {attackedCopy.signer.identity}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">Nonce:</span>
+                      <span className={attackedCopy.cryptography.nonce.includes('REUSED') ? 'text-red-500 font-bold' : ''}>
+                        {attackedCopy.cryptography.nonce.slice(0, 16)}...
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">Observed QBER:</span>
+                      <span className={attackedCopy.quantum_evidence.observed_qber > 11.0 ? 'text-red-500 font-bold' : ''}>
+                        {attackedCopy.quantum_evidence.observed_qber.toFixed(2)}% {attackedCopy.quantum_evidence.observed_qber > 11.0 ? '(CRITICAL)' : ''}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Tampered Content Preview */}
+                  <div className="pt-2">
+                    <div className="text-[10px] font-mono uppercase text-gray-500 font-semibold mb-1">
+                      Tampered Content Snippet:
+                    </div>
+                    <pre className={`p-2 rounded border text-[10px] font-mono max-h-24 overflow-y-auto leading-relaxed ${
+                      theme === 'light' ? 'bg-white border-red-200 text-gray-800' : 'bg-black/40 border-[#1E293B] text-gray-300'
+                    }`}>
+                      {attackedCopy.original_artifact.raw_content.slice(0, 200)}...
+                    </pre>
+                  </div>
+                </div>
+              </div>
+
+              {/* Exact Mutation Diff Breakdown */}
+              {diffItems.length > 0 && (
+                <div className={`p-3 rounded border space-y-2 ${
+                  theme === 'light' ? 'bg-gray-50 border-gray-200' : 'bg-[#111827] border-[#1E293B]'
+                }`}>
+                  <div className="flex items-center gap-2">
+                    <GitCompare className="w-3.5 h-3.5 text-amber-500" />
+                    <span className="text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300">
+                      Mutated Security Fields Diff ({diffItems.length} changes detected)
+                    </span>
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs font-mono">
+                      <thead>
+                        <tr className="border-b border-gray-200 dark:border-[#1E293B] text-gray-500 text-[10px] uppercase">
+                          <th className="py-1 px-2">Field</th>
+                          <th className="py-1 px-2">Original (Untouched)</th>
+                          <th className="py-1 px-2">Attacked Copy (Tampered)</th>
+                          <th className="py-1 px-2">Threat Vector Impact</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200 dark:divide-[#1E293B]">
+                        {diffItems.map((d, i) => (
+                          <tr key={i} className="hover:bg-black/5 dark:hover:bg-white/5">
+                            <td className="py-1.5 px-2 font-semibold text-blue-600 dark:text-blue-400">
+                              {d.label}
+                            </td>
+                            <td className="py-1.5 px-2 text-emerald-600 dark:text-emerald-400">
+                              {d.originalValue}
+                            </td>
+                            <td className="py-1.5 px-2 text-red-600 dark:text-red-400 font-bold">
+                              {d.attackedValue}
+                            </td>
+                            <td className="py-1.5 px-2 text-gray-500">
+                              {d.field}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* TAB 2: RESEARCH THREAT MATRIX (8 SCENARIOS) */}
+      {activeViewTab === 'scenarios' && (
+        <div className="space-y-4">
+          {/* Filter Bar */}
+          <div className={`p-3 rounded-lg border flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+            theme === 'light' ? 'bg-white border-gray-200' : 'bg-[#111827] border-[#1E293B]'
+          }`}>
+            <div className="flex items-center gap-1.5 text-xs flex-wrap">
+              <span className="text-[11px] font-semibold text-gray-500 mr-1">Category:</span>
+              {(['ALL', 'Classical Cryptography', 'Protocol & State', 'Quantum Channel'] as const).map(cat => (
+                <button
+                  key={cat}
+                  onClick={() => setSelectedCategory(cat)}
+                  className={`px-2.5 py-1 rounded text-xs font-medium border cursor-pointer transition ${
+                    selectedCategory === cat
+                      ? 'bg-amber-600 text-white border-amber-600 font-semibold'
+                      : theme === 'light'
+                        ? 'bg-gray-50 text-gray-600 border-gray-300 hover:bg-gray-100'
+                        : 'bg-[#162032] text-gray-400 border-[#1E293B] hover:text-white'
+                  }`}
+                >
+                  {cat}
+                </button>
+              ))}
+            </div>
+
+            <div className="w-full sm:w-64">
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search vector or standard..."
+                className={`w-full px-2.5 py-1 rounded border text-xs focus:outline-hidden ${
+                  theme === 'light'
+                    ? 'border-gray-300 bg-white text-gray-900 focus:border-amber-500'
+                    : 'border-[#1E293B] bg-[#162032] text-white focus:border-amber-500'
+                }`}
+              />
+            </div>
+          </div>
+
+          {/* Scenario Cards Grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+            {filteredScenarios.map(s => (
+              <div
+                key={s.id}
+                className={`p-4 rounded-lg border flex flex-col justify-between transition ${
+                  theme === 'light'
+                    ? 'bg-white border-gray-200 hover:border-amber-400 shadow-xs'
+                    : 'bg-[#111827] border-[#1E293B] hover:border-amber-500/50'
+                }`}
+              >
+                <div>
+                  <div className="flex items-center justify-between gap-2 mb-1.5">
+                    <span className={`text-[10px] font-mono px-2 py-0.5 rounded font-bold uppercase ${
+                      s.severity === 'Critical'
+                        ? 'bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20'
+                        : s.severity === 'High'
+                          ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20'
+                          : 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20'
+                    }`}>
+                      {s.severity} Severity
+                    </span>
+                    <span className="text-[10px] text-gray-500 font-mono">{s.standardsReference}</span>
+                  </div>
+
+                  <h3 className={`text-sm font-bold leading-tight ${theme === 'light' ? 'text-gray-900' : 'text-white'}`}>
+                    {s.title}
+                  </h3>
+                  <div className="text-[11px] text-amber-600 dark:text-amber-400 font-mono mt-0.5">{s.vector}</div>
+
+                  <p className="text-xs text-gray-500 mt-2 leading-relaxed">
+                    {s.mechanism}
+                  </p>
+
+                  <div className="mt-3 space-y-1">
+                    <div className="text-[10px] font-mono uppercase text-gray-400 font-semibold">Expected Signals:</div>
+                    {s.expectedIndicators.map((ind, i) => (
+                      <div key={i} className="text-[11px] text-gray-600 dark:text-gray-400 flex items-start gap-1.5">
+                        <span className="text-amber-500 shrink-0 font-bold">&bull;</span>
+                        <span>{ind}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="mt-4 pt-3 border-t border-gray-200 dark:border-[#1E293B] flex items-center justify-between">
+                  <span className="text-[10px] font-mono text-gray-500">{s.sampleId}</span>
+                  <button
+                    onClick={() => onLoadAndAnalyze(s.sampleId)}
+                    className="px-3 py-1.5 rounded bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer shadow-xs"
+                  >
+                    <Play className="w-3.5 h-3.5" />
+                    <span>Load &amp; Analyze</span>
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

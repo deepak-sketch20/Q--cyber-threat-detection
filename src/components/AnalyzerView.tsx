@@ -16,9 +16,14 @@ import {
   Info,
   ExternalLink,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  KeyRound,
+  Zap,
+  ArrowRight,
+  GitBranch,
+  Radio
 } from 'lucide-react';
-import { AnalysisResponse, AttackTableRow, UploadProgressState } from '../types';
+import { AnalysisResponse, AttackTableRow, UploadProgressState, QdsVerificationResult, QdsPackage } from '../types';
 import { AdaptiveThresholdSection } from './AdaptiveThresholdSection';
 import { StreamingUploadProgress } from './StreamingUploadProgress';
 import { EvidenceForensicViewer } from './EvidenceForensicViewer';
@@ -46,6 +51,11 @@ interface AnalyzerViewProps {
   onDismissError: () => void;
   onOpenCertModal: () => void;
   onOpenCbomModal: () => void;
+  qdsVerificationResult?: QdsVerificationResult | null;
+  activeQdsPackage?: QdsPackage | null;
+  onNavigateToSigning?: () => void;
+  onNavigateToAttackLab?: () => void;
+  theme?: 'dark' | 'light';
 }
 
 const WORKFLOW_STEPS = [
@@ -81,7 +91,12 @@ export const AnalyzerView: React.FC<AnalyzerViewProps> = ({
   onRetry,
   onDismissError,
   onOpenCertModal,
-  onOpenCbomModal
+  onOpenCbomModal,
+  qdsVerificationResult,
+  activeQdsPackage,
+  onNavigateToSigning,
+  onNavigateToAttackLab,
+  theme = 'light'
 }) => {
   const [isDragging, setIsDragging] = useState(false);
   const [copiedHash, setCopiedHash] = useState(false);
@@ -496,6 +511,170 @@ export const AnalyzerView: React.FC<AnalyzerViewProps> = ({
           </div>
         </div>
       </div>
+
+      {/* ===================================================================== */}
+      {/* 4.5. CENTRAL VERIFICATION ENGINE: 8-STEP VERIFICATION PIPELINE */}
+      {/* ===================================================================== */}
+      {qdsVerificationResult && (
+        <div className={`rounded-lg border-2 p-4 space-y-4 shadow-sm ${
+          qdsVerificationResult.overall_decision === 'VALID'
+            ? theme === 'light' ? 'bg-emerald-50/50 border-emerald-500' : 'bg-[#091815] border-emerald-500/60'
+            : qdsVerificationResult.overall_decision === 'WARNING'
+            ? theme === 'light' ? 'bg-amber-50/50 border-amber-500' : 'bg-[#1A1308] border-amber-500/60'
+            : theme === 'light' ? 'bg-red-50/50 border-red-500' : 'bg-[#1C0D12] border-red-500/60'
+        }`}>
+          {/* Header & Overall Decision */}
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-3 border-b border-black/10 dark:border-white/10">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">
+                  Central Verification Engine
+                </span>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded border border-blue-400/30 bg-blue-500/10 font-bold uppercase">
+                  8-Layer Verification Pipeline
+                </span>
+                {qdsVerificationResult.is_attack_copy && (
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-red-500/20 text-red-600 dark:text-red-400 border border-red-500/40 font-bold">
+                    ISOLATED ATTACK COPY
+                  </span>
+                )}
+              </div>
+              <h2 className="text-base font-bold mt-1 text-gray-900 dark:text-white">
+                Final Decision: {qdsVerificationResult.overall_decision === 'VALID' ? 'VALID (AUTHENTIC & SECURE)' : qdsVerificationResult.overall_decision === 'WARNING' ? 'WARNING (SUSPICIOUS)' : 'COMPROMISED (ATTACK DETECTED)'}
+              </h2>
+              <p className="text-xs text-gray-600 dark:text-gray-300 mt-0.5 max-w-3xl leading-relaxed">
+                {qdsVerificationResult.decision_summary}
+              </p>
+            </div>
+
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 shrink-0">
+              <span className={`px-3 py-1.5 rounded text-xs font-bold font-mono border uppercase flex items-center gap-1.5 ${
+                qdsVerificationResult.overall_decision === 'VALID'
+                  ? 'bg-emerald-600 text-white border-emerald-600'
+                  : qdsVerificationResult.overall_decision === 'WARNING'
+                  ? 'bg-amber-600 text-white border-amber-600'
+                  : 'bg-red-600 text-white border-red-600'
+              }`}>
+                {qdsVerificationResult.overall_decision === 'VALID' ? <CheckCircle2 className="w-4 h-4" /> : <ShieldAlert className="w-4 h-4" />}
+                <span>DECISION: {qdsVerificationResult.overall_decision}</span>
+              </span>
+
+              <span className="text-xs font-mono px-2.5 py-1 rounded bg-black/10 dark:bg-white/10 font-semibold text-center">
+                Score: {qdsVerificationResult.risk_score}/100 ({qdsVerificationResult.threat_level})
+              </span>
+            </div>
+          </div>
+
+          {/* 8-Step Pipeline Status Grid */}
+          <div>
+            <div className="flex items-center justify-between text-xs font-mono uppercase text-gray-500 font-bold mb-2">
+              <span>8-Layer Verification Status ({qdsVerificationResult.passed_count}/8 Passed)</span>
+              <span>Target: {qdsVerificationResult.target_file} ({qdsVerificationResult.package_id})</span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2.5">
+              {qdsVerificationResult.steps.map(s => (
+                <div
+                  key={s.step_number}
+                  className={`p-3 rounded-lg border text-left flex flex-col justify-between ${
+                    s.status === 'PASS'
+                      ? theme === 'light' ? 'bg-white border-emerald-200' : 'bg-[#0E1B17] border-emerald-500/30'
+                      : s.status === 'WARN'
+                      ? theme === 'light' ? 'bg-white border-amber-300' : 'bg-[#1E190E] border-amber-500/30'
+                      : theme === 'light' ? 'bg-white border-red-300' : 'bg-[#1F0E13] border-red-500/40'
+                  }`}
+                >
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[10px] font-mono font-bold text-gray-500">
+                        LAYER {s.step_number}: {s.category}
+                      </span>
+                      <span className={`text-[10px] font-mono px-1.5 py-0.2 rounded font-bold uppercase ${
+                        s.status === 'PASS'
+                          ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400'
+                          : s.status === 'WARN'
+                          ? 'bg-amber-500/20 text-amber-600 dark:text-amber-400'
+                          : 'bg-red-500/20 text-red-600 dark:text-red-400'
+                      }`}>
+                        {s.status}
+                      </span>
+                    </div>
+
+                    <div className={`text-xs font-bold ${
+                      s.status === 'FAIL' ? 'text-red-600 dark:text-red-400' : ''
+                    }`}>
+                      {s.title}
+                    </div>
+
+                    <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1 line-clamp-2 leading-relaxed">
+                      {s.details}
+                    </p>
+                  </div>
+
+                  <div className="mt-2 pt-2 border-t border-black/5 dark:border-white/5 text-[10px] font-mono flex flex-col gap-0.5 text-gray-500">
+                    <div className="truncate">Observed: <strong className="text-gray-700 dark:text-gray-300">{s.observed_value}</strong></div>
+                    <div className="truncate">Expected: {s.expected_value}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Attack Path Reconstruction & Remediation */}
+          {qdsVerificationResult.attack_path_reconstruction && qdsVerificationResult.attack_path_reconstruction.length > 0 && (
+            <div className={`p-3 rounded-lg border space-y-1.5 ${
+              theme === 'light' ? 'bg-white border-gray-200' : 'bg-[#111827] border-[#1E293B]'
+            }`}>
+              <div className="flex items-center gap-2">
+                <GitBranch className="w-3.5 h-3.5 text-blue-500" />
+                <span className="text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300">
+                  Forensic Attack Path Reconstruction
+                </span>
+              </div>
+              <div className="space-y-1">
+                {qdsVerificationResult.attack_path_reconstruction.map((path, idx) => (
+                  <div key={idx} className="text-xs font-mono flex items-start gap-2 text-gray-600 dark:text-gray-300">
+                    <span className="text-blue-500 font-bold shrink-0">{idx + 1}.</span>
+                    <span>{path}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Quick Action Navigation Bar */}
+          <div className="flex items-center justify-between pt-2 border-t border-black/10 dark:border-white/10 flex-wrap gap-2">
+            <div className="text-[11px] text-gray-500 font-mono">
+              Evidence artifacts correlated with Threat Detector, Risk Engine, and CycloneDX CBOM below.
+            </div>
+
+            <div className="flex items-center gap-2">
+              {onNavigateToAttackLab && (
+                <button
+                  onClick={onNavigateToAttackLab}
+                  className="px-3 py-1.5 rounded bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition shadow-xs"
+                >
+                  <Zap className="w-3.5 h-3.5" />
+                  <span>Open in Attack Lab</span>
+                </button>
+              )}
+              {onNavigateToSigning && (
+                <button
+                  onClick={onNavigateToSigning}
+                  className={`px-3 py-1.5 rounded border text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition ${
+                    theme === 'light'
+                      ? 'border-gray-300 bg-white hover:bg-gray-100 text-gray-700'
+                      : 'border-[#1E293B] bg-[#162032] hover:bg-[#1E293B] text-gray-200'
+                  }`}
+                >
+                  <KeyRound className="w-3.5 h-3.5" />
+                  <span>Sign New .QDS Package</span>
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ===================================================================== */}
       {/* 5. SECURITY RESULT SECTION (The most important part of the page) */}

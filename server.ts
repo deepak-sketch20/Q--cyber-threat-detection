@@ -37,6 +37,13 @@ import {
   generateAnalystToken,
   verifyAnalystToken
 } from './src/dbService';
+import {
+  createQdsPackage,
+  cloneAndAttackPackage,
+  QDS_PRESET_TEMPLATES,
+  QdsAttackVectorId
+} from './src/qdsPackageEngine';
+import { verifyQdsPackage } from './src/qdsVerificationEngine';
 
 async function startServer() {
   // Initialize persistent storage safely (PostgreSQL or resilient local fallback)
@@ -203,14 +210,16 @@ async function startServer() {
   });
 
   // API 8e: Get Database Configuration & Provider Options
-  app.get('/api/database/config', (req, res) => {
+  const handleDatabaseStatus = (req: any, res: any) => {
     try {
       const dbStatus = getDatabaseStatus();
       res.json({ success: true, database: dbStatus });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err?.message || 'Failed to fetch database configuration' });
     }
-  });
+  };
+  app.get('/api/database/config', handleDatabaseStatus);
+  app.get('/api/database/status', handleDatabaseStatus);
 
   // API 8f: Switch Active Database Engine
   app.post('/api/database/switch', async (req, res) => {
@@ -454,6 +463,73 @@ async function startServer() {
   };
   app.get('/api/qds/simulate', handleSimulate);
   app.post('/api/qds/simulate', handleSimulate);
+
+  // ============================================================================
+  // QDS SECURITY & VERIFICATION PLATFORM API ENDPOINTS
+  // ============================================================================
+
+  // API 16: QDS Signing Engine - Create .QDS Package
+  app.post('/api/qds/sign', async (req, res) => {
+    try {
+      const { filename, content, algorithm, signerIdentity, signerEmail, signerRole, signerOrg, quantumProtocol } = req.body || {};
+      if (!content) {
+        return res.status(400).json({ success: false, error: 'File content payload is required for QDS signing.' });
+      }
+      const pkg = await createQdsPackage({
+        filename: filename || 'document.txt',
+        content,
+        algorithm,
+        signerIdentity,
+        signerEmail,
+        signerRole,
+        signerOrg,
+        quantumProtocol
+      });
+      res.json({ success: true, package: pkg });
+    } catch (err: any) {
+      console.error('API /api/qds/sign error:', err);
+      res.status(500).json({ success: false, error: err?.message || 'QDS package signing failed' });
+    }
+  });
+
+  // API 17: Central Verification Engine - Verify .QDS Package
+  app.post('/api/qds/verify', async (req, res) => {
+    try {
+      const { package: pkg } = req.body || {};
+      if (!pkg || !pkg.original_artifact || !pkg.cryptography) {
+        return res.status(400).json({ success: false, error: 'Valid .QDS package object is required.' });
+      }
+      const verificationResult = await verifyQdsPackage(pkg);
+      res.json({ success: true, verification: verificationResult });
+    } catch (err: any) {
+      console.error('API /api/qds/verify error:', err);
+      res.status(500).json({ success: false, error: err?.message || 'QDS package verification failed' });
+    }
+  });
+
+  // API 18: Attack Lab - Generate Isolated Attacked Copy
+  app.post('/api/qds/attack', (req, res) => {
+    try {
+      const { package: originalPkg, vector_id } = req.body || {};
+      if (!originalPkg || !vector_id) {
+        return res.status(400).json({ success: false, error: 'Original .QDS package and vector_id are required.' });
+      }
+      const attackedCopy = cloneAndAttackPackage(originalPkg, vector_id as QdsAttackVectorId);
+      res.json({
+        success: true,
+        original_package_id: originalPkg.package_id,
+        attacked_copy: attackedCopy
+      });
+    } catch (err: any) {
+      console.error('API /api/qds/attack error:', err);
+      res.status(500).json({ success: false, error: err?.message || 'Attack simulation mutation failed' });
+    }
+  });
+
+  // API 19: Get QDS Presets
+  app.get('/api/qds/presets', (req, res) => {
+    res.json({ success: true, presets: QDS_PRESET_TEMPLATES });
+  });
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== 'production') {

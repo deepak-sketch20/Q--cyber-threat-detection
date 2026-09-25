@@ -11,10 +11,12 @@ import {
   Mail,
   X,
   Layers,
-  ChevronRight
+  ChevronRight,
+  KeyRound,
+  FileCheck
 } from 'lucide-react';
 
-export type NavTabId = 'dashboard' | 'analyzer' | 'attack-sim' | 'quantum-lab' | 'reports' | 'audit-logs';
+export type NavTabId = 'dashboard' | 'qds-signing' | 'analyzer' | 'attack-sim' | 'quantum-lab' | 'reports' | 'audit-logs';
 
 interface LeftSidebarProps {
   activeTab: NavTabId;
@@ -28,11 +30,12 @@ interface LeftSidebarProps {
 }
 
 export const NAV_ITEMS: { id: NavTabId; label: string; icon: React.ComponentType<{ className?: string }>; description: string }[] = [
-  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, description: 'SOC Overview & Metrics' },
-  { id: 'analyzer', label: 'Security Analyzer', icon: Shield, description: 'File & Hash Verification' },
-  { id: 'attack-sim', label: 'Attack Simulation', icon: Zap, description: 'Threat Vectors & Forgery' },
+  { id: 'dashboard', label: 'SOC Dashboard', icon: LayoutDashboard, description: 'Platform Overview & Status' },
+  { id: 'qds-signing', label: 'QDS Signing Engine', icon: KeyRound, description: 'File to .QDS Package' },
+  { id: 'analyzer', label: 'Verification Engine', icon: Shield, description: '8-Step Central Verifier' },
+  { id: 'attack-sim', label: 'Attack Simulation', icon: Zap, description: 'Threat Vectors & Isolation' },
   { id: 'quantum-lab', label: 'Quantum Security', icon: Cpu, description: 'Statevector & QDS Labs' },
-  { id: 'reports', label: 'Reports', icon: FileText, description: 'Forensic PDF & Cases' },
+  { id: 'reports', label: 'Forensic Reports', icon: FileText, description: 'Forensic PDF & Cases' },
   { id: 'audit-logs', label: 'Audit Logs', icon: Terminal, description: 'Immutable SOC Audit Trail' },
 ];
 

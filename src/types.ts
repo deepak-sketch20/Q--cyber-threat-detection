@@ -411,3 +411,121 @@ export interface UploadProgressState {
   riskScore?: number;
   error?: string;
 }
+
+// ============================================================================
+// QDS SECURITY PACKAGE & CENTRAL VERIFICATION ENGINE TYPES
+// ============================================================================
+
+export type QdsSignatureAlgorithm =
+  | 'ML-DSA-65 (Dilithium3)'
+  | 'Falcon-512'
+  | 'SPHINCS+-SHA2-128s'
+  | 'ECDSA-P256-SHA256'
+  | 'RSA-PSS-2048';
+
+export type QdsQuantumProtocol =
+  | 'BB84-Decoy-State'
+  | 'E91-Entanglement'
+  | 'Continuous-Variable-QDS';
+
+export interface QdsPackage {
+  format: 'QDS-PACKAGE-v2.0';
+  package_id: string; // e.g. "QDS-PKG-2026-98124"
+  created_at: string;
+  original_artifact: {
+    filename: string;
+    file_type: string;
+    mime_type: string;
+    file_size_bytes: number;
+    file_size_formatted: string;
+    raw_content: string; // Payload content text or base64
+    is_binary: boolean;
+  };
+  cryptography: {
+    sha256: string;
+    signature_algorithm: QdsSignatureAlgorithm;
+    signature_type: 'POST_QUANTUM' | 'CLASSICAL';
+    digital_signature: string; // hex / base64 signature
+    nonce: string; // 32-char hex nonce
+    session_id: string; // e.g. "SESS-2026-8841"
+    timestamp: string; // ISO 8601
+    epoch_ms: number;
+  };
+  signer: {
+    identity: string;
+    email: string;
+    role: string;
+    organization: string;
+    public_key: string;
+    key_fingerprint: string;
+    certificate_serial: string;
+    trust_status: 'AUTHORIZED' | 'UNTRUSTED';
+  };
+  quantum_evidence: {
+    protocol: QdsQuantumProtocol;
+    qber_baseline: number; // e.g. 1.25%
+    observed_qber: number; // e.g. 1.25%
+    raw_key_bits: number;
+    sifted_key_bits: number;
+    quantum_state_fidelity: number; // e.g. 0.994
+    phase_error_rate: number; // e.g. 1.1%
+    decoy_state_yield: number; // e.g. 0.985
+    channel_attenuation_db: number;
+    channel_status: 'SECURE' | 'DISTURBED' | 'COMPROMISED';
+    eve_detected: boolean;
+    quantum_simulation_note: string;
+  };
+  metadata: {
+    version: '2.0';
+    app: 'Q-SHIELD Security & Verification Platform';
+    generator: 'QDS Signing Engine v2.0';
+    immutable_hash: string;
+    is_attack_copy?: boolean;
+    attack_parent_id?: string;
+    attack_applied?: {
+      vector_id: string;
+      title: string;
+      category: string;
+      timestamp: string;
+      description: string;
+      tampered_fields: string[];
+    };
+  };
+}
+
+export interface QdsVerificationStepResult {
+  step_number: number;
+  step_name: string;
+  category: 'Hash Integrity' | 'Signature' | 'Nonce' | 'Session' | 'Replay' | 'QBER' | 'Quantum Evidence' | 'Signer PKI';
+  status: 'PASS' | 'FAIL' | 'WARN';
+  title: string;
+  details: string;
+  observed_value: string;
+  expected_value: string;
+  threat_signal?: string;
+  location?: string;
+}
+
+export interface QdsVerificationResult {
+  package_id: string;
+  target_file: string;
+  verified_at: string;
+  is_attack_copy: boolean;
+  attack_details?: {
+    vector_id: string;
+    title: string;
+    tampered_fields: string[];
+  };
+  steps: QdsVerificationStepResult[];
+  passed_count: number;
+  failed_count: number;
+  warn_count: number;
+  overall_decision: 'VALID' | 'WARNING' | 'COMPROMISED';
+  decision_summary: string;
+  threat_level: 'SECURE' | 'ELEVATED' | 'HIGH' | 'CRITICAL';
+  risk_score: number;
+  attack_path_reconstruction: string[];
+  recommended_actions: string[];
+  threat_analysis: AnalysisResponse;
+}
+
